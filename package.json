@@ -1,0 +1,30 @@
+{
+  "name": "research-discovery-app",
+  "version": "0.1.0",
+  "description": "Academic source discovery with intelligent relationship detection powered by Minimax M3",
+  "main": "backend/server.js",
+  "scripts": {
+    "dev": "node backend/server.js",
+    "start": "node backend/server.js",
+    "build": "echo \"Frontend is static; no build step needed\""
+  },
+  "keywords": [
+    "research",
+    "discovery",
+    "academic",
+    "papers",
+    "semantic-scholar",
+    "minimax"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "serverless-http": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
