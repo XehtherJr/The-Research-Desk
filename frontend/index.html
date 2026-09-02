@@ -6,10 +6,10 @@
   <meta name="description" content="AI-native document discovery engine V1. Goal-relative discovery ranking, evidence evaluation, and multi-provider search across OpenAlex, Crossref, and company research.">
   <title>Document Discovery Engine V1 — Intelligent Research Library</title>
   
-  <!-- Typography: Crimson Pro (Display Serif) & Inter (Clean Sans) -->
+  <!-- Typography: literary display serif, practical sans, and archival mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=DM+Mono:wght@400;500&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
   
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -18,15 +18,40 @@
   <div class="top-progress-bar" id="top-progress-bar" aria-hidden="true"></div>
 
   <div class="page-container">
+    <aside class="desk-sidebar" aria-label="Research Desk navigation">
+      <div class="desk-brand">
+        <div class="desk-lamp" aria-hidden="true">◒</div>
+        <div>
+          <span class="desk-brand-name">The Research Desk</span>
+          <span class="desk-brand-subtitle">Document Discovery Engine</span>
+        </div>
+      </div>
+      <div class="sidebar-section sidebar-inquiries">
+        <h2>Recent Inquiries</h2>
+        <div id="sidebar-inquiry-list">
+          <p class="sidebar-empty">Your inquiries will appear here.</p>
+        </div>
+        <button type="button" class="sidebar-link hidden" id="view-all-inquiries" aria-label="View all inquiries">View all inquiries →</button>
+      </div>
+      <div class="sidebar-section sidebar-library">
+        <h2>Your Library</h2>
+        <button type="button" class="library-item" data-library-view="saved"><span>▣</span> Saved Collections <b id="library-saved-count">0</b></button>
+        <button type="button" class="library-item" data-library-view="later"><span>♧</span> Read Later <b id="library-later-count">0</b></button>
+        <button type="button" class="library-item" data-library-view="notes"><span>✎</span> Notes <b id="library-notes-count">0</b></button>
+        <button type="button" class="library-item" data-library-view="downloads"><span>⇩</span> Downloads <b id="library-downloads-count">0</b></button>
+      </div>
+      <div class="sidebar-motto">Knowledge<br>is cumulative.</div>
+    </aside>
+    <div class="desk-workspace">
     <!-- ═══════════ MASTHEAD & HEADER ═══════════ -->
     <header class="catalog-header" id="catalog-header">
       <div class="masthead">
         <div class="masthead-brand">
           <span class="masthead-eyebrow">Discovery Architecture V1</span>
-          <h1 class="masthead-title">Document Discovery Engine</h1>
+          <h1 class="masthead-title">Research Desk</h1>
         </div>
         <div class="masthead-meta">
-          <span class="catalog-status">Providers: OpenAlex • Crossref • 9 Company Scrapers</span>
+            <span class="catalog-status">A considered place for finding what matters.</span>
           <span class="catalog-phase">Goal-Relative Discovery & Evidence Model</span>
         </div>
       </div>
@@ -40,7 +65,7 @@
               type="search"
               id="search-input"
               class="search-input"
-              placeholder="Enter your research goal (e.g. 'I want to build a system that detects hallucinations in LLMs')..."
+              placeholder="What are you looking for?"
               autocomplete="off"
               spellcheck="false"
               required
@@ -59,8 +84,8 @@
                 type="range"
                 id="limit-slider"
                 class="limit-slider"
-                min="15"
-                max="25"
+                min="5"
+                max="30"
                 value="20"
                 step="1"
                 aria-label="Result count limit"
@@ -91,9 +116,9 @@
       <!-- Initial Empty State -->
       <section class="state-container empty-state" id="empty-state">
         <div class="state-box">
-          <h2 class="state-title">Goal-Oriented Document Discovery</h2>
+          <h2 class="state-title">Begin your inquiry</h2>
           <p class="state-description">
-            Describe what you want to learn, build, or investigate. The engine analyzes your research goal, queries OpenAlex, Crossref, and leading research labs (Anthropic, OpenAI, DeepMind, Meta, Microsoft, Apple, NVIDIA, NASA, Genentech), and delivers evaluated, role-organized sources.
+            Describe what you want to learn, build, or investigate. The engine analyzes your research goal, queries our sources, and delivers evaluated, role-organized sources.
           </p>
           <div class="sample-queries">
             <span class="sample-label">Try research goal queries:</span>
@@ -195,7 +220,6 @@
           <div class="results-stats">
             <span class="results-count-text" id="results-count">0 curated documents</span>
             <span class="results-timing" id="results-timing"></span>
-            <span class="source-provenance" id="source-provenance">Providers: OpenAlex • Crossref • Company Scrapers</span>
           </div>
 
           <div class="results-actions">
@@ -239,25 +263,6 @@
             <div class="filters-header">
               <h3 class="filters-title">Refine Results</h3>
               <button type="button" class="filter-reset-link" id="filter-reset-btn">Reset All</button>
-            </div>
-
-            <!-- Provider Filter -->
-            <div class="filter-block">
-              <h4 class="filter-label">Discovered Via</h4>
-              <div class="filter-options">
-                <label class="filter-item">
-                  <input type="checkbox" name="provider-filter" value="openalex" checked>
-                  <span class="filter-text">OpenAlex</span>
-                </label>
-                <label class="filter-item">
-                  <input type="checkbox" name="provider-filter" value="crossref" checked>
-                  <span class="filter-text">Crossref</span>
-                </label>
-                <label class="filter-item">
-                  <input type="checkbox" name="provider-filter" value="company" checked>
-                  <span class="filter-text">Company Research Scrapers</span>
-                </label>
-              </div>
             </div>
 
             <!-- Document Type Filter -->
@@ -339,13 +344,18 @@
 
     </main>
 
+    <section class="library-view hidden" id="library-view" aria-live="polite">
+      <div class="library-view-header">
+        <div><span class="plan-tag">Your desk</span><h2 id="library-view-title">Saved Collections</h2></div>
+        <button type="button" class="button-secondary" id="library-view-close">Back to discovery</button>
+      </div>
+      <div class="library-view-list" id="library-view-list"></div>
+    </section>
+
     <!-- ═══════════ FOOTER ═══════════ -->
     <footer class="catalog-footer">
-      <div class="footer-inner">
-        <p>Document Discovery Engine V1 • Multi-provider scholarly retrieval & goal-relative evidence evaluation</p>
-        <p class="footer-license">Distributed under MIT License • OpenAlex • Crossref • Institutional Research Scrapers</p>
-      </div>
     </footer>
+    </div>
   </div>
 
   <!-- ═══════════ DOCUMENT DETAIL MODAL ═══════════ -->
@@ -389,7 +399,12 @@
         <!-- Abstract -->
         <div class="modal-abstract-section">
           <h3 class="modal-section-title">Abstract</h3>
-          <p class="modal-abstract-text" id="modal-abstract-text"></p>
+          <div class="modal-abstract-text" id="modal-abstract-text"></div>
+        </div>
+
+        <div class="modal-preview-section hidden" id="modal-preview-section">
+          <h3 class="modal-section-title">Preview</h3>
+          <iframe class="document-preview" id="document-preview" title="Document preview"></iframe>
         </div>
 
         <!-- Actions -->

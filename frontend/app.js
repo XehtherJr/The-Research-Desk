@@ -28,6 +28,16 @@
     searchBtn: $('#search-btn'),
     recentContainer: $('#recent-queries'),
     recentTags: $('#recent-tags'),
+    sidebarInquiryList: $('#sidebar-inquiry-list'),
+    viewAllInquiries: $('#view-all-inquiries'),
+    librarySavedCount: $('#library-saved-count'),
+    libraryLaterCount: $('#library-later-count'),
+    libraryNotesCount: $('#library-notes-count'),
+    libraryDownloadsCount: $('#library-downloads-count'),
+    libraryView: $('#library-view'),
+    libraryViewTitle: $('#library-view-title'),
+    libraryViewList: $('#library-view-list'),
+    libraryViewClose: $('#library-view-close'),
 
     // State Containers
     emptyState: $('#empty-state'),
@@ -104,6 +114,8 @@
     modalEvidenceList: $('#modal-evidence-list'),
     modalProvenanceChips: $('#modal-provenance-chips'),
     modalAbstractText: $('#modal-abstract-text'),
+    modalPreviewSection: $('#modal-preview-section'),
+    documentPreview: $('#document-preview'),
     modalFooterActions: $('#modal-footer-actions'),
   };
 
@@ -117,12 +129,17 @@
   let activeQuery = '';
 
   const STORAGE_RECENT_KEY = 'dde_recent_searches_v1';
+  const STORAGE_LIBRARY_KEY = 'research_desk_library_v1';
   const MAX_RECENT_QUERIES = 5;
 
   // ═══════════ INITIALIZATION ═══════════
   function init() {
     bindEvents();
     renderRecentQueries();
+    renderSidebarInquiries();
+    updateLibraryCounts();
+    $$('[data-library-view]').forEach((button) => button.addEventListener('click', () => showLibraryView(button.dataset.libraryView)));
+    dom.libraryViewClose.addEventListener('click', hideLibraryView);
     if (dom.input) dom.input.focus();
   }
 
@@ -156,6 +173,7 @@
       });
     });
 
+    // Sidebar inquiry shortcuts
     // Retry Button
     dom.retryBtn.addEventListener('click', () => {
       if (activeQuery) dom.input.value = activeQuery;
@@ -191,10 +209,6 @@
 
     // Sidebar Filters
     $$('input[name="type-filter"]').forEach((cb) => {
-      cb.addEventListener('change', applyFiltersAndSort);
-    });
-
-    $$('input[name="provider-filter"]').forEach((cb) => {
       cb.addEventListener('change', applyFiltersAndSort);
     });
 
@@ -284,7 +298,7 @@
       const totalMs = data.metadata?.timing?.total_ms || data.duration_ms || 0;
       dom.resultsTiming.textContent = `${totalMs}ms`;
 
-      if (data.metadata?.providers && data.metadata.providers.length > 0) {
+      if (dom.sourceProvenance && data.metadata?.providers && data.metadata.providers.length > 0) {
         dom.sourceProvenance.textContent = `Providers: ${data.metadata.providers.join(' • ')}`;
       }
 
@@ -359,7 +373,6 @@
   // ═══════════ FILTERING & SORTING ═══════════
   function applyFiltersAndSort() {
     const selectedTypes = new Set($$('input[name="type-filter"]:checked').map((cb) => cb.value));
-    const selectedProviders = new Set($$('input[name="provider-filter"]:checked').map((cb) => cb.value));
     const fromYear = parseInt(dom.dateFrom.value, 10) || null;
     const toYear = parseInt(dom.dateTo.value, 10) || null;
     const openAccessOnly = dom.filterOA.checked;
@@ -375,18 +388,6 @@
 
       // Document Type Filter
       if (!selectedTypes.has(doc.type)) {
-        return false;
-      }
-
-      // Provider Filter
-      const docProviders = (doc.provenance?.providers || []).map((p) => p.provider.toLowerCase());
-      const hasMatchingProvider = docProviders.some((dp) => {
-        if (selectedProviders.has('company') && dp === 'company') return true;
-        if (selectedProviders.has('openalex') && dp === 'openalex') return true;
-        if (selectedProviders.has('crossref') && dp === 'crossref') return true;
-        return false;
-      });
-      if (selectedProviders.size > 0 && !hasMatchingProvider) {
         return false;
       }
 
@@ -406,7 +407,6 @@
     const isFiltered =
       activeRoleTab !== 'all' ||
       selectedTypes.size < 5 ||
-      selectedProviders.size < 3 ||
       fromYear !== null ||
       toYear !== null ||
       openAccessOnly;
@@ -472,7 +472,6 @@
     activeRoleTab = 'all';
     dom.roleTabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.role === 'all'));
     $$('input[name="type-filter"]').forEach((cb) => (cb.checked = true));
-    $$('input[name="provider-filter"]').forEach((cb) => (cb.checked = true));
     dom.dateFrom.value = '';
     dom.dateTo.value = '';
     dom.filterOA.checked = false;
@@ -543,6 +542,8 @@
     const card = document.createElement('article');
     card.className = 'document-card';
     card.setAttribute('data-id', doc.id);
+    const savedLibrary = getLibrary();
+    if ((savedLibrary.read || []).some((entry) => entryId(entry) === doc.id)) card.classList.add('is-read');
 
     const roleName = formatRoleName(item.role || 'applied');
     const docTypeName = formatDocType(doc.type);
@@ -593,7 +594,7 @@
 
       <!-- Abstract preview -->
       <div class="card-abstract-wrap">
-        <p class="card-abstract-text" id="abstract-${escapeHTML(doc.id)}">${escapeHTML(doc.abstract || 'No abstract preview available.')}</p>
+        <div class="card-abstract-text" id="abstract-${escapeHTML(doc.id)}">${markdownToHTML(doc.abstract || 'No abstract preview available.')}</div>
         ${doc.abstract && doc.abstract.length > 220 ? `
           <button type="button" class="toggle-abstract-btn" data-target="abstract-${escapeHTML(doc.id)}" aria-expanded="false">
             Read full abstract ↓
@@ -610,6 +611,11 @@
         </div>
 
         <div class="card-actions">
+          <button type="button" class="card-action-btn library-action-btn" data-library-action="saved">Save</button>
+          <button type="button" class="card-action-btn library-action-btn" data-library-action="later">Read Later</button>
+          <button type="button" class="card-action-btn library-action-btn" data-library-action="read">Mark Read</button>
+          <button type="button" class="card-action-btn library-action-btn" data-library-action="note">Note</button>
+          <button type="button" class="card-action-btn library-action-btn" data-library-action="download">Download</button>
           <button type="button" class="card-action-btn view-details-btn">
             Document Details
           </button>
@@ -637,6 +643,10 @@
       detailsBtn.addEventListener('click', () => openModal(item));
     }
 
+    card.querySelectorAll('.library-action-btn').forEach((button) => {
+      button.addEventListener('click', () => handleLibraryAction(button.dataset.libraryAction, item, button));
+    });
+
     return card;
   }
 
@@ -653,7 +663,7 @@
     dom.modalAuthors.textContent = (doc.metadata?.authors || doc.authors || []).join(', ');
     dom.modalVenue.textContent = doc.metadata?.venue ? `Published in: ${doc.metadata.venue}` : '';
     dom.modalWhyUsefulText.textContent = item.whyUseful || evalData.explanation || 'Key domain reference.';
-    dom.modalAbstractText.textContent = doc.abstract || 'No abstract text indexed.';
+    dom.modalAbstractText.innerHTML = markdownToHTML(doc.abstract || 'No abstract text indexed.');
 
     // Evidence Findings List
     dom.modalEvidenceList.innerHTML = '';
@@ -689,15 +699,16 @@
     // Modal Footer Actions
     const primaryUrl = item.accessPath?.url || doc.canonicalUrl || '#';
     const pdfUrl = doc.access?.pdfUrl || doc.metadata?.openAccessPdf || null;
+    dom.modalPreviewSection.classList.toggle('hidden', !pdfUrl);
+    if (pdfUrl) dom.documentPreview.src = pdfUrl;
 
     dom.modalFooterActions.innerHTML = `
       <a href="${escapeHTML(primaryUrl)}" target="_blank" rel="noopener noreferrer" class="modal-action-btn">
         Open Landing Page ↗
       </a>
       ${pdfUrl ? `
-        <a href="${escapeHTML(pdfUrl)}" target="_blank" rel="noopener noreferrer" class="modal-action-btn">
-          View Open Access PDF ↗
-        </a>
+        <button type="button" class="modal-action-btn" id="modal-preview-btn">Preview here</button>
+        <a href="${escapeHTML(pdfUrl)}" download target="_blank" rel="noopener noreferrer" class="modal-action-btn">Download file</a>
       ` : ''}
       <button type="button" class="modal-action-btn-secondary" id="modal-copy-cite-btn">
         Copy Citation (APA)
@@ -705,6 +716,8 @@
     `;
 
     const copyBtn = $('#modal-copy-cite-btn');
+    const previewBtn = $('#modal-preview-btn');
+    if (previewBtn) previewBtn.addEventListener('click', () => dom.modalPreviewSection.classList.toggle('hidden'));
     if (copyBtn) {
       copyBtn.addEventListener('click', () => {
         const citation = generateAPACitation(doc);
@@ -831,6 +844,7 @@
       if (recent.length > MAX_RECENT_QUERIES) recent = recent.slice(0, MAX_RECENT_QUERIES);
       localStorage.setItem(STORAGE_RECENT_KEY, JSON.stringify(recent));
       renderRecentQueries();
+      renderSidebarInquiries();
     } catch (e) {
       console.warn('LocalStorage unavailable:', e);
     }
@@ -846,22 +860,155 @@
 
       dom.recentTags.innerHTML = '';
       recent.forEach((q) => {
+        const chip = document.createElement('span');
+        chip.className = 'recent-query-chip';
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'recent-query-chip';
+        btn.className = 'recent-query-open';
         btn.textContent = q;
         btn.addEventListener('click', () => {
           dom.input.value = q;
           dom.clearBtn.classList.remove('hidden');
           dom.form.dispatchEvent(new Event('submit', { cancelable: true }));
         });
-        dom.recentTags.appendChild(btn);
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'recent-query-remove';
+        removeBtn.setAttribute('aria-label', `Remove recent search: ${q}`);
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => removeRecentQuery(q));
+        chip.append(btn, removeBtn);
+        dom.recentTags.appendChild(chip);
       });
 
       dom.recentContainer.classList.remove('hidden');
     } catch (e) {
       dom.recentContainer.classList.add('hidden');
     }
+  }
+
+  function removeRecentQuery(query) {
+    try {
+      const recent = JSON.parse(localStorage.getItem(STORAGE_RECENT_KEY) || '[]');
+      localStorage.setItem(STORAGE_RECENT_KEY, JSON.stringify(recent.filter((q) => q !== query)));
+      renderRecentQueries();
+      renderSidebarInquiries();
+    } catch (e) {
+      console.warn('LocalStorage unavailable:', e);
+    }
+  }
+
+  function getLibrary() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_LIBRARY_KEY) || '{"saved":[],"later":[],"notes":[],"downloads":[]}');
+    } catch (e) {
+      return { saved: [], later: [], notes: [], downloads: [] };
+    }
+  }
+
+  function updateLibraryCounts() {
+    const library = getLibrary();
+    dom.librarySavedCount.textContent = library.saved.length;
+    dom.libraryLaterCount.textContent = library.later.length;
+    dom.libraryNotesCount.textContent = library.notes.length;
+    dom.libraryDownloadsCount.textContent = library.downloads.length;
+  }
+
+  function handleLibraryAction(action, item, button) {
+    const library = getLibrary();
+    const id = item.document.id;
+    const entry = { id, title: item.document.title, url: item.accessPath?.url || item.document.canonicalUrl || '', text: '' };
+    if (action === 'note') {
+      const note = window.prompt('Add a note for this document:');
+      if (!note || !note.trim()) return;
+      entry.text = note.trim();
+      library.notes = library.notes.filter((savedEntry) => entryId(savedEntry) !== id);
+      library.notes.push(entry);
+    } else if (action === 'download') {
+      const url = getDownloadUrl(item) || item.accessPath?.url || item.document.canonicalUrl;
+      if (url) downloadSourceFile(url, item.document.title);
+      if (!library.downloads.some((savedEntry) => entryId(savedEntry) === id)) library.downloads.push(entry);
+    } else if (action === 'read') {
+      library.read = library.read || [];
+      if (!library.read.some((savedEntry) => entryId(savedEntry) === id)) library.read.push(entry);
+      button.classList.add('is-active');
+      button.textContent = 'Read';
+      button.closest('.document-card').classList.add('is-read');
+    } else {
+      const collection = library[action];
+      const index = collection.findIndex((savedEntry) => entryId(savedEntry) === id);
+      if (index === -1) collection.push(entry);
+      else collection.splice(index, 1);
+      button.classList.toggle('is-active', index === -1);
+    }
+    localStorage.setItem(STORAGE_LIBRARY_KEY, JSON.stringify(library));
+    updateLibraryCounts();
+    if (action === 'note') button.textContent = 'Note saved';
+    if (action === 'download') button.textContent = 'Downloaded';
+  }
+
+  function getDownloadUrl(item) {
+    return item.document.access?.pdfUrl || item.document.metadata?.openAccessPdf || item.accessPath?.pdfUrl || null;
+  }
+
+  async function downloadSourceFile(url, title) {
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) throw new Error('Source download unavailable');
+      const blobUrl = URL.createObjectURL(await response.blob());
+      downloadFile(blobUrl, `${sanitizeFilename(title)}.pdf`);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch (error) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  function entryId(entry) { return typeof entry === 'string' ? entry : entry.id; }
+
+  function showLibraryView(view) {
+    const names = { saved: 'Saved Collections', later: 'Read Later', notes: 'Notes', downloads: 'Downloads' };
+    const library = getLibrary();
+    const entries = (library[view] || []).map((entry) => typeof entry === 'string' ? { id: entry, title: entry } : entry);
+    dom.libraryViewTitle.textContent = names[view] || 'Your Library';
+    dom.libraryViewList.innerHTML = entries.length ? entries.map((entry) => `<article class="library-entry"><h3>${escapeHTML(entry.title || entry.id)}</h3>${entry.text ? `<p>${escapeHTML(entry.text)}</p>` : ''}${entry.url ? `<a href="${escapeHTML(entry.url)}" target="_blank" rel="noopener noreferrer">Open source ↗</a>` : ''}</article>`).join('') : '<p class="library-empty">Nothing here yet. Save a document from your discovery results to start building this shelf.</p>';
+    dom.emptyState.classList.add('hidden');
+    dom.resultsView.classList.add('hidden');
+    dom.libraryView.classList.remove('hidden');
+  }
+
+  function hideLibraryView() {
+    dom.libraryView.classList.add('hidden');
+    if (fullDiscoveryResults.length) dom.resultsView.classList.remove('hidden');
+    else dom.emptyState.classList.remove('hidden');
+  }
+
+  function markdownToHTML(markdown) {
+    const escaped = escapeHTML(markdown || '');
+    return escaped.replace(/^### (.*)$/gm, '<h5>$1</h5>').replace(/^## (.*)$/gm, '<h4>$1</h4>').replace(/^# (.*)$/gm, '<h3>$1</h3>').replace(/^[-*] (.*)$/gm, '<li>$1</li>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>').split(/\n\n+/).map((block) => block.startsWith('<h') || block.startsWith('<li>') ? block : `<p>${block.replace(/\n/g, '<br>')}</p>`).join('').replace(/(<li>.*?<\/li>)+/gs, '<ul>$&</ul>');
+  }
+
+  function renderSidebarInquiries() {
+    if (!dom.sidebarInquiryList) return;
+    const recent = JSON.parse(localStorage.getItem(STORAGE_RECENT_KEY) || '[]');
+    dom.sidebarInquiryList.innerHTML = '';
+    if (recent.length === 0) {
+      dom.sidebarInquiryList.innerHTML = '<p class="sidebar-empty">Your inquiries will appear here.</p>';
+      dom.viewAllInquiries.classList.add('hidden');
+      return;
+    }
+    recent.slice(0, 5).forEach((query, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'inquiry-item';
+      button.innerHTML = `<b>${String(index + 1).padStart(2, '0')}</b><span>${escapeHTML(query)}</span><small>Recent</small>`;
+      button.addEventListener('click', () => {
+        dom.input.value = query;
+        dom.clearBtn.classList.remove('hidden');
+        dom.form.dispatchEvent(new Event('submit', { cancelable: true }));
+      });
+      dom.sidebarInquiryList.appendChild(button);
+    });
+    dom.viewAllInquiries.classList.toggle('hidden', recent.length <= 5);
   }
 
   // ═══════════ HELPERS ═══════════
