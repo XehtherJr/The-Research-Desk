@@ -1,34 +1,34 @@
-# Research Discovery App
+# Document Discovery Engine — Phase 1
 
-Find and explore academic sources with AI-powered semantic relationship detection.
+An intentional, AI-native document discovery engine for searching, cataloging, and navigating scholarly papers, books, technical reports, empirical datasets, and code repositories.
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-green)
+![Catalog](https://img.shields.io/badge/catalog-OpenAlex-warm_neutral)
 
 ## Features
 
-- 🔍 **Search** academic papers via Semantic Scholar
-- 🧠 **AI Relationship Detection** — Minimax M3 classifies papers as conceptually-similar, builds-on, responds-to, alternative-method, shared-dataset, or explicit-critique
-- 📊 **Interactive Table** — sortable columns, color-coded relationship badges
-- 🎛️ **Client-side Filtering** — filter by relationship type, date range, open access
-- 📥 **Export** — download filtered results as CSV
-- 🔢 **JSON View** — toggle raw API response
-- ⚡ **Fast** — batched M3 calls (5 papers/batch), parallel execution
+- 🔍 **Broad Document Discovery** — Search 250M+ scholarly works across papers, books, technical reports, datasets, and repositories via OpenAlex.
+- 🏛️ **Library + Taxonomy + Minimalist Design** — Grounded in archival research aesthetics (warm off-white background, hairline dividers, display serif typography, square borders, generous whitespace).
+- 🏷️ **Taxonomy Reading Path** — Built-in structural indicator orienting users from foundational theory to applied methods and data assets.
+- 🎛️ **Multi-attribute Filtering** — Filter by document type, publication year range, and open access availability.
+- ↕️ **Flexible Sorting** — Sort by OpenAlex relevance ranking, citation count, publication date, or title.
+- 📥 **Export** — Download filtered search results as formatted CSV or JSON files.
+- ⚡ **Zero Rate-Limiting Bottlenecks** — Powered by OpenAlex's unthrottled public API (no API keys required for Phase 1).
 
 ## Quick Start
 
 ### Prerequisites
 - Node.js 16+
-- Minimax API key ([get one here](https://platform.minimax.io/))
+- No API keys required for Phase 1
 
 ### Installation
 
 ```bash
 git clone <your-repo-url>
-cd research-discovery-app
+cd file-search
 npm install
 cp .env.example .env
-# Edit .env: add your MINIMAX_KEY
 ```
 
 ### Run Locally
@@ -42,46 +42,44 @@ npm run dev
 
 | Variable | Required | Description |
 |---|---|---|
-| `MINIMAX_KEY` | Yes | Minimax M3 API key for relationship detection |
-| `SCHOLAR_API_KEY` | No | Semantic Scholar API key (higher rate limits) |
-| `PORT` | No | Server port (default: 3000) |
+| `PORT` | No | Server port (default: `3000`) |
 | `NODE_ENV` | No | `development` or `production` |
 
 ## Project Structure
 
 ```
+file-search/
 ├── backend/
 │   ├── server.js              # Local dev entry point
 │   ├── app.js                 # Express app (shared)
-│   ├── routes/search.js       # POST /api/search
+│   ├── routes/search.js       # POST /api/search (OpenAlex search)
 │   ├── services/
-│   │   ├── semantic-scholar.js  # Scholar API client
-│   │   └── minimax.js           # M3 relationship classifier
-│   └── utils/normalize.js     # Result normalization
+│   │   ├── openalex.js        # Primary OpenAlex search & abstract inverted index reconstruction
+│   │   └── minimax.js         # Preserved for Phase 4+ AI evaluation
+│   └── utils/normalize.js     # Standardized document normalization
 ├── frontend/
-│   ├── index.html             # Main page
-│   ├── styles.css             # Dark mode design system
-│   └── app.js                 # Client-side logic
-├── netlify/functions/api.js   # Serverless wrapper
-├── netlify.toml               # Netlify config
+│   ├── index.html             # Semantic Library + Taxonomy structure
+│   ├── styles.css             # Archival minimalist design system
+│   └── app.js                 # Client-side controller (search, sort, filter, export)
+├── netlify/functions/api.js   # Serverless API wrapper
+├── netlify.toml               # Netlify configuration
 └── package.json
 ```
 
 ## Deployment (Netlify)
 
-1. Push to GitHub
-2. Connect repo on [netlify.com](https://netlify.com)
-3. Set environment variables in Netlify dashboard:
-   - `MINIMAX_KEY` = your API key
-4. Deploy — auto-deploys on every push to `main`
+1. Push code to GitHub repository
+2. Connect repository on [Netlify](https://netlify.com)
+3. Deploy — auto-deploys on push to `main`
 
 ## API
 
-### POST /api/search
+### `POST /api/search`
 
+**Request:**
 ```json
 {
-  "query": "quantum error correction",
+  "query": "quantum error correction surface codes",
   "limit": 25
 }
 ```
@@ -89,18 +87,35 @@ npm run dev
 **Response:**
 ```json
 {
-  "query": "quantum error correction",
+  "query": "quantum error correction surface codes",
   "limit_requested": 25,
-  "results_returned": 23,
-  "duration_ms": 4200,
-  "timestamp": "2024-08-28T14:30:00Z",
-  "results": [...]
+  "results_returned": 25,
+  "total_matches": 255807,
+  "duration_ms": 780,
+  "timestamp": "2026-09-02T11:20:00.000Z",
+  "source": "openalex",
+  "results": [
+    {
+      "id": "openalex_W2060887031",
+      "title": "Mixed-state entanglement and quantum error correction",
+      "authors": ["Charles H. Bennett", "David P. DiVincenzo", "John A. Smolin", "William K. Wootters"],
+      "date": "1996-11-01",
+      "type": "paper",
+      "abstract": "Entanglement purification protocols (EPPs) and quantum error-correcting codes...",
+      "url": "https://doi.org/10.1103/physreva.54.3824",
+      "metadata": {
+        "openAccess": true,
+        "openAccessPdf": "https://arxiv.org/pdf/quant-ph/9604024",
+        "doi": "10.1103/physreva.54.3824",
+        "venue": "Physical Review A",
+        "citationCount": 5423,
+        "source": "openalex",
+        "referencedWorksCount": 45
+      }
+    }
+  ]
 }
 ```
-
-## Cost
-
-~$0.01 per search (25 papers × Minimax M3 batched calls). Semantic Scholar API is free.
 
 ## License
 

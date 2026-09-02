@@ -117,16 +117,18 @@ function repairAndParseJSON(raw) {
 }
 
 /**
- * Call Minimax M3 API with a single batch of papers.
+ * Call AI API (OpenRouter or Minimax) with a single batch of papers.
  * @param {string} query - User's research query
  * @param {Array} papers - Batch of normalized papers (up to BATCH_SIZE)
  * @param {number} startIndex - Starting index for paper_index tracking
  * @returns {Promise<Array>} Array of relationship classifications
  */
 async function classifyBatch(query, papers, startIndex) {
-  const apiKey = process.env.MINIMAX_KEY;
-  if (!apiKey) {
-    console.warn('MINIMAX_KEY not set — skipping relationship detection');
+  const openRouterKey = process.env.OPENROUTER_KEY || process.env.OPENROUTER_API_KEY;
+  const minimaxKey = process.env.MINIMAX_KEY;
+
+  if (!openRouterKey && !minimaxKey) {
+    console.warn('Neither OPENROUTER_KEY nor MINIMAX_KEY set — skipping relationship detection');
     return papers.map((_, i) => ({
       paper_index: startIndex + i,
       primary_relationship: null,
@@ -135,8 +137,30 @@ async function classifyBatch(query, papers, startIndex) {
     }));
   }
 
-  const body = {
-    model: 'MiniMax-M3',
+  let response;
+  let apiUrl;
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+  const primaryModel = openRouterKey
+    ? process.env.OPENROUTER_MODEL || 'minimax/minimax-m3:free'
+    : 'MiniMax-M3';
+  const backupModel = openRouterKey
+    ? process.env.OPENROUTER_BACKUP_MODEL || 'nvidia/nemotron-3-ultra:free'
+    : null;
+
+  if (openRouterKey) {
+    apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${openRouterKey}`;
+    headers['HTTP-Referer'] = 'http://localhost:3000';
+    headers['X-Title'] = 'Research Discovery App';
+  } else {
+    apiUrl = MINIMAX_API_URL;
+    headers['Authorization'] = `Bearer ${minimaxKey}`;
+  }
+
+  const payload = {
+    model: primaryModel,
     messages: [
       { role: 'system', content: buildSystemPrompt() },
       { role: 'user', content: buildUserPrompt(query, papers, startIndex) },
@@ -145,22 +169,31 @@ async function classifyBatch(query, papers, startIndex) {
     max_tokens: 2000,
   };
 
-  const response = await fetch(MINIMAX_API_URL, {
+  response = await fetch(apiUrl, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
+    headers: headers,
+    body: JSON.stringify(payload),
   });
+
+  // Automatic OpenRouter backup retry if primary free model fails
+  if (!response.ok && openRouterKey && !process.env.OPENROUTER_MODEL && backupModel) {
+    console.warn(`[OpenRouter] Primary model '${primaryModel}' returned ${response.status}. Retrying with backup model '${backupModel}'...`);
+    payload.model = backupModel;
+    response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(payload),
+    });
+  }
 
   if (!response.ok) {
     const status = response.status;
     const errBody = await response.text().catch(() => '');
-    console.error(`Minimax API error ${status}: ${errBody}`);
+    const providerName = openRouterKey ? 'OpenRouter' : 'Minimax';
+    console.error(`${providerName} API error ${status}: ${errBody}`);
 
     if (status === 429) {
-      throw new Error('MINIMAX_RATE_LIMITED');
+      throw new Error('AI_RATE_LIMITED');
     }
 
     // Return null relationships on error — papers still shown

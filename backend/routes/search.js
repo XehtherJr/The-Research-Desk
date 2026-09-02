@@ -1,13 +1,12 @@
 /**
- * search.js — POST /api/search route.
- * Orchestrates: validate → Scholar fetch → M3 classify → filter → respond.
+ * search.js — POST /api/search route for Document Discovery Engine (Phase 1).
+ * Fetches works from OpenAlex, normalizes them, and returns standardized document results.
  */
 
 const express = require('express');
 const router = express.Router();
-const { searchPapers } = require('../services/semantic-scholar');
-const { classifyRelationships } = require('../services/minimax');
-const { normalizePapers } = require('../utils/normalize');
+const { searchWorks } = require('../services/openalex');
+const { normalizeWorks } = require('../utils/normalize');
 
 /**
  * POST /api/search
@@ -17,7 +16,6 @@ router.post('/', async (req, res) => {
   const startTime = Date.now();
 
   try {
-    // --- Validate input ---
     const { query } = req.body;
     let { limit } = req.body;
 
@@ -37,78 +35,43 @@ router.post('/', async (req, res) => {
 
     console.log(`[search] Query: "${trimmedQuery}", Limit: ${limit}`);
 
-    // --- Fetch papers from Semantic Scholar ---
-    let scholarResult;
-    try {
-      scholarResult = await searchPapers(trimmedQuery, limit);
-    } catch (err) {
-      if (err.message.includes('RATE_LIMITED')) {
-        return res.status(429).json({
-          error: 'Search service is temporarily busy. Please wait a moment and try again.',
-          code: 'RATE_LIMITED',
-        });
-      }
-      throw err;
-    }
+    // Fetch documents from OpenAlex
+    const openAlexResult = await searchWorks(trimmedQuery, limit);
 
-    if (!scholarResult.papers || scholarResult.papers.length === 0) {
+    if (!openAlexResult.results || openAlexResult.results.length === 0) {
       return res.json({
         query: trimmedQuery,
         limit_requested: limit,
         results_returned: 0,
+        total_matches: 0,
         duration_ms: Date.now() - startTime,
+        source: 'openalex',
         results: [],
       });
     }
 
-    console.log(
-      `[search] Scholar returned ${scholarResult.papers.length} papers (total: ${scholarResult.total})`
-    );
-
-    // --- Normalize papers ---
-    const normalizedPapers = normalizePapers(scholarResult.papers);
-
-    // --- Classify relationships via Minimax M3 ---
-    let classifiedPapers;
-    try {
-      classifiedPapers = await classifyRelationships(
-        trimmedQuery,
-        normalizedPapers
-      );
-    } catch (err) {
-      console.error('[search] M3 classification error:', err.message);
-      // Graceful degradation: return papers without relationships
-      classifiedPapers = normalizedPapers;
-    }
-
-    // --- Filter out "unrelated" papers ---
-    const filteredPapers = classifiedPapers.filter((paper) => {
-      const primaryType = paper.relationships?.primary?.type;
-      // Keep papers with no classification (M3 failed) or with a real relationship
-      return primaryType !== 'unrelated';
-    });
-
-    // --- Trim to requested limit ---
-    const finalPapers = filteredPapers.slice(0, limit);
-
+    // Normalize OpenAlex works into standard schema
+    const normalizedDocuments = normalizeWorks(openAlexResult.results).slice(0, limit);
     const durationMs = Date.now() - startTime;
+
     console.log(
-      `[search] Returning ${finalPapers.length} results in ${durationMs}ms`
+      `[search] OpenAlex returned ${normalizedDocuments.length} documents (total: ${openAlexResult.total}) in ${durationMs}ms`
     );
 
     return res.json({
       query: trimmedQuery,
       limit_requested: limit,
-      results_returned: finalPapers.length,
-      total_from_scholar: scholarResult.total,
+      results_returned: normalizedDocuments.length,
+      total_matches: openAlexResult.total,
       duration_ms: durationMs,
       timestamp: new Date().toISOString(),
-      results: finalPapers,
+      source: 'openalex',
+      results: normalizedDocuments,
     });
   } catch (err) {
-    console.error('[search] Unhandled error:', err);
+    console.error('[search] Unhandled error:', err.message || err);
     return res.status(500).json({
-      error: 'Something went wrong. Please try again.',
+      error: 'Something went wrong while discovering documents. Please try again.',
       code: 'SERVER_ERROR',
     });
   }

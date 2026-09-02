@@ -1,172 +1,193 @@
 /**
- * app.js — Frontend logic for Research Discovery App
- * Handles search, table rendering, sorting, filtering, export, and modal.
+ * app.js — Client-side Controller for Document Discovery Engine
+ * Handles OpenAlex search, state transitions, sorting, multi-attribute filtering,
+ * export (CSV/JSON), and document metadata detail modal.
  */
 
 (function () {
   'use strict';
 
-  // ═══════════ DOM REFS ═══════════
-  const $ = (sel) => document.querySelector(sel);
-  const $$ = (sel) => document.querySelectorAll(sel);
+  // ═══════════ DOM ELEMENTS ═══════════
+  const $ = (selector) => document.querySelector(selector);
+  const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
   const dom = {
-    // Search
+    // Progress Bar
+    progressBar: $('#top-progress-bar'),
+
+    // Search Controls
     form: $('#search-form'),
     input: $('#search-input'),
     clearBtn: $('#search-clear-btn'),
     limitSlider: $('#limit-slider'),
     limitValue: $('#limit-value'),
     searchBtn: $('#search-btn'),
+    recentContainer: $('#recent-queries'),
+    recentTags: $('#recent-tags'),
 
-    // Recent
-    recentContainer: $('#recent-searches'),
-    recentList: $('#recent-list'),
-
-    // States
+    // State Containers
     emptyState: $('#empty-state'),
     loadingState: $('#loading-state'),
-    loadingText: $('#loading-text'),
+    loadingStatusText: $('#loading-status-text'),
     errorState: $('#error-state'),
     errorTitle: $('#error-title'),
     errorMessage: $('#error-message'),
     retryBtn: $('#retry-btn'),
-    resultsContainer: $('#results-container'),
+    resultsView: $('#results-view'),
 
-    // Loading steps
-    stepSearch: $('#step-search'),
-    stepClassify: $('#step-classify'),
-    stepRender: $('#step-render'),
-
-    // Results header
+    // Results Header & Actions
     resultsCount: $('#results-count'),
-    resultsTime: $('#results-time'),
-    filterBadge: $('#filter-badge'),
-    filterBadgeCount: $('#filter-badge-count'),
-    filterBadgeClear: $('#filter-badge-clear'),
-
-    // Actions
+    resultsTiming: $('#results-timing'),
+    sortSelect: $('#sort-select'),
     exportCsvBtn: $('#export-csv-btn'),
-    toggleJsonBtn: $('#toggle-json-btn'),
-    newSearchBtn: $('#new-search-btn'),
-
-    // Table
-    tbody: $('#results-tbody'),
-    noFilteredResults: $('#no-filtered-results'),
-    filterResetInline: $('#filter-reset-inline-btn'),
+    exportJsonBtn: $('#export-json-btn'),
 
     // Filters
-    filterSidebar: $('#filter-sidebar'),
-    filterToggle: $('#filter-toggle-btn'),
+    filtersPanel: $('#filters-panel'),
     filterResetBtn: $('#filter-reset-btn'),
     dateFrom: $('#date-from'),
     dateTo: $('#date-to'),
     filterOA: $('#filter-oa'),
+    activeFilterIndicator: $('#active-filter-indicator'),
+    clearFiltersLink: $('#clear-filters-link'),
+    resetFiltersInlineBtn: $('#reset-filters-inline-btn'),
 
-    // JSON
-    jsonView: $('#json-view'),
-    jsonContent: $('#json-content'),
-    jsonCopyBtn: $('#json-copy-btn'),
+    // Type counts
+    countPaper: $('#count-paper'),
+    countBook: $('#count-book'),
+    countReport: $('#count-report'),
+    countDataset: $('#count-dataset'),
+    countRepository: $('#count-repository'),
 
-    // Modal
-    modalOverlay: $('#modal-overlay'),
-    modal: $('#paper-modal'),
-    modalClose: $('#modal-close'),
+    // Document Stream & Error
+    documentStream: $('#document-stream'),
+    noFilteredMessage: $('#no-filtered-message'),
+
+    // JSON Inspector
+    jsonInspector: $('#json-inspector'),
+    jsonCode: $('#json-code'),
+    copyJsonBtn: $('#copy-json-btn'),
+
+    // Detail Modal
+    modalBackdrop: $('#modal-backdrop'),
+    modalCard: $('#modal-card'),
+    modalCloseBtn: $('#modal-close-btn'),
+    modalDocType: $('#modal-doc-type'),
+    modalDate: $('#modal-date'),
+    modalOA: $('#modal-oa'),
     modalTitle: $('#modal-title'),
     modalAuthors: $('#modal-authors'),
-    modalMeta: $('#modal-meta'),
-    modalRelationships: $('#modal-relationships'),
-    modalAbstract: $('#modal-abstract'),
-    modalLinks: $('#modal-links'),
+    modalVenue: $('#modal-venue'),
+    modalMetaGrid: $('#modal-meta-grid'),
+    modalAbstractText: $('#modal-abstract-text'),
+    modalFooterActions: $('#modal-footer-actions'),
   };
 
   // ═══════════ STATE ═══════════
-  let currentResults = [];     // Full results from last search
-  let filteredResults = [];    // After client-side filtering
-  let lastResponse = null;     // Full API response (for JSON view)
-  let sortColumn = null;       // Current sort column
-  let sortDirection = 'asc';   // 'asc' or 'desc'
-  let lastQuery = '';
+  let rawDocuments = [];       // Full results from API
+  let filteredDocuments = [];  // Filtered & sorted view
+  let lastApiResponse = null;  // Complete payload for JSON view
+  let currentSort = 'relevance';
+  let activeQuery = '';
 
-  const RECENT_KEY = 'rd_recent_searches';
-  const MAX_RECENT = 3;
+  const STORAGE_RECENT_KEY = 'dde_recent_searches_v1';
+  const MAX_RECENT_QUERIES = 5;
 
-  // ═══════════ INIT ═══════════
+  // ═══════════ INITIALIZATION ═══════════
   function init() {
     bindEvents();
-    loadRecentSearches();
-    dom.input.focus();
+    renderRecentQueries();
+    
+    // Focus search input on initial load
+    if (dom.input) {
+      dom.input.focus();
+    }
   }
 
   function bindEvents() {
-    // Search
-    dom.form.addEventListener('submit', handleSearch);
+    // Search Form
+    dom.form.addEventListener('submit', handleSearchSubmit);
+
     dom.input.addEventListener('input', () => {
-      dom.clearBtn.classList.toggle('hidden', dom.input.value.length === 0);
+      dom.clearBtn.classList.toggle('hidden', !dom.input.value.trim());
     });
+
     dom.clearBtn.addEventListener('click', () => {
       dom.input.value = '';
       dom.clearBtn.classList.add('hidden');
       dom.input.focus();
     });
+
     dom.limitSlider.addEventListener('input', () => {
       dom.limitValue.textContent = dom.limitSlider.value;
     });
 
-    // Retry / New Search
-    dom.retryBtn.addEventListener('click', handleSearch);
-    dom.newSearchBtn.addEventListener('click', resetToEmpty);
-
-    // Sort headers
-    $$('.results-table thead th.sortable').forEach((th) => {
-      th.addEventListener('click', () => handleSort(th.dataset.sort));
+    // Sample Query Clicks
+    $$('.sample-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const query = btn.dataset.query;
+        if (query) {
+          dom.input.value = query;
+          dom.clearBtn.classList.remove('hidden');
+          dom.form.dispatchEvent(new Event('submit', { cancelable: true }));
+        }
+      });
     });
 
-    // Filters
-    $$('.filter-checkbox input[type="checkbox"]').forEach((cb) => {
-      cb.addEventListener('change', applyFilters);
+    // Retry Button
+    dom.retryBtn.addEventListener('click', () => {
+      if (activeQuery) {
+        dom.input.value = activeQuery;
+      }
+      dom.form.dispatchEvent(new Event('submit', { cancelable: true }));
     });
-    dom.dateFrom.addEventListener('input', applyFilters);
-    dom.dateTo.addEventListener('input', applyFilters);
-    dom.filterOA.addEventListener('change', applyFilters);
+
+    // Sorting
+    dom.sortSelect.addEventListener('change', (e) => {
+      currentSort = e.target.value;
+      applyFiltersAndSort();
+    });
+
+    // Filtering
+    $$('input[name="type-filter"]').forEach((cb) => {
+      cb.addEventListener('change', applyFiltersAndSort);
+    });
+
+    dom.dateFrom.addEventListener('input', applyFiltersAndSort);
+    dom.dateTo.addEventListener('input', applyFiltersAndSort);
+    dom.filterOA.addEventListener('change', applyFiltersAndSort);
+
     dom.filterResetBtn.addEventListener('click', resetFilters);
-    dom.filterBadgeClear.addEventListener('click', resetFilters);
-    dom.filterResetInline.addEventListener('click', resetFilters);
+    if (dom.clearFiltersLink) dom.clearFiltersLink.addEventListener('click', resetFilters);
+    if (dom.resetFiltersInlineBtn) dom.resetFiltersInlineBtn.addEventListener('click', resetFilters);
 
-    // Mobile filter toggle
-    dom.filterToggle.addEventListener('click', () => {
-      dom.filterSidebar.classList.toggle('open');
-    });
-
-    // Export & JSON
+    // Export Buttons
     dom.exportCsvBtn.addEventListener('click', exportCSV);
-    dom.toggleJsonBtn.addEventListener('click', toggleJSON);
-    dom.jsonCopyBtn.addEventListener('click', copyJSON);
+    dom.exportJsonBtn.addEventListener('click', exportJSON);
 
-    // Modal
-    dom.modalClose.addEventListener('click', closeModal);
-    dom.modalOverlay.addEventListener('click', (e) => {
-      if (e.target === dom.modalOverlay) closeModal();
+    // Copy Raw JSON
+    dom.copyJsonBtn.addEventListener('click', copyRawJson);
+
+    // Modal Events
+    dom.modalCloseBtn.addEventListener('click', closeModal);
+    dom.modalBackdrop.addEventListener('click', (e) => {
+      if (e.target === dom.modalBackdrop) {
+        closeModal();
+      }
     });
 
-    // Keyboard
+    // Keyboard Navigation
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        if (!dom.modalOverlay.classList.contains('hidden')) {
+        if (!dom.modalBackdrop.classList.contains('hidden')) {
           closeModal();
-        } else if (dom.filterSidebar.classList.contains('open')) {
-          dom.filterSidebar.classList.remove('open');
         }
-      }
-      if (e.key === 'Enter' && document.activeElement === dom.input) {
-        e.preventDefault();
-        dom.form.dispatchEvent(new Event('submit', { cancelable: true }));
       }
     });
   }
 
-  // ═══════════ SEARCH ═══════════
-  async function handleSearch(e) {
+  // ═══════════ SEARCH HANDLER ═══════════
+  async function handleSearchSubmit(e) {
     if (e && e.preventDefault) e.preventDefault();
 
     const query = dom.input.value.trim();
@@ -176,20 +197,15 @@
     }
 
     const limit = parseInt(dom.limitSlider.value, 10) || 25;
-    lastQuery = query;
+    activeQuery = query;
+    saveRecentQuery(query);
 
-    // Save to recent
-    saveRecentSearch(query);
-
-    // Show loading
+    // Set Loading State
     showState('loading');
-    setLoadingStep('search');
+    startProgressBar();
     dom.searchBtn.disabled = true;
 
     try {
-      // Simulate step progress
-      setTimeout(() => setLoadingStep('classify'), 800);
-
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -197,48 +213,369 @@
       });
 
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `Server error (${response.status})`);
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error || `Server responded with status ${response.status}`);
       }
 
       const data = await response.json();
-      setLoadingStep('render');
+      lastApiResponse = data;
+      rawDocuments = data.results || [];
 
-      // Small delay to show render step
-      await new Promise((r) => setTimeout(r, 300));
+      completeProgressBar();
 
-      lastResponse = data;
-      currentResults = data.results || [];
-
-      if (currentResults.length === 0) {
-        showError('No papers found', 'Try a broader query or different keywords.');
+      if (rawDocuments.length === 0) {
+        showError('No documents found', 'No works matching your query were found in the catalog. Try broadening your terms or checking spelling.');
         return;
       }
 
-      // Reset sort & filters, then render
-      sortColumn = null;
-      sortDirection = 'asc';
-      resetFilters(false);
-      applyFilters();
-      showState('results');
+      // Update meta information
+      dom.resultsCount.textContent = `${data.results_returned} of ${data.total_matches.toLocaleString()} documents found`;
+      dom.resultsTiming.textContent = `(${data.duration_ms}ms)`;
 
-      // Update meta
-      dom.resultsCount.textContent = `${currentResults.length} result${currentResults.length !== 1 ? 's' : ''}`;
-      dom.resultsTime.textContent = data.duration_ms ? `${(data.duration_ms / 1000).toFixed(1)}s` : '';
+      // Populate JSON inspector
+      dom.jsonCode.textContent = JSON.stringify(data, null, 2);
+
+      // Reset filters and apply default sort
+      resetFiltersSilently();
+      updateTypeCounts();
+      applyFiltersAndSort();
+
+      showState('results');
     } catch (err) {
-      console.error('Search error:', err);
-      showError('Search failed', err.message || 'Please try again.');
+      console.error('[Search] Error:', err);
+      resetProgressBar();
+      showError('Search Request Failed', err.message || 'Unable to connect to the document discovery service.');
     } finally {
       dom.searchBtn.disabled = false;
     }
   }
 
-  // ═══════════ STATE MANAGEMENT ═══════════
+  // ═══════════ FILTERING & SORTING ═══════════
+  function applyFiltersAndSort() {
+    const selectedTypes = new Set(
+      $$('input[name="type-filter"]:checked').map((cb) => cb.value)
+    );
+
+    const fromYear = parseInt(dom.dateFrom.value, 10) || null;
+    const toYear = parseInt(dom.dateTo.value, 10) || null;
+    const openAccessOnly = dom.filterOA.checked;
+
+    // Filter documents
+    filteredDocuments = rawDocuments.filter((doc) => {
+      // Type filter
+      if (!selectedTypes.has(doc.type)) return false;
+
+      // Year filter
+      const docYear = parseInt(doc.date.slice(0, 4), 10);
+      if (fromYear && (!docYear || docYear < fromYear)) return false;
+      if (toYear && (!docYear || docYear > toYear)) return false;
+
+      // Open access filter
+      if (openAccessOnly && !doc.metadata?.openAccess) return false;
+
+      return true;
+    });
+
+    // Check if any non-default filter is active
+    const isFiltered =
+      selectedTypes.size < 5 || fromYear !== null || toYear !== null || openAccessOnly;
+
+    dom.activeFilterIndicator.classList.toggle('hidden', !isFiltered);
+
+    // Apply Sorting
+    sortDocuments(filteredDocuments, currentSort);
+
+    // Render cards
+    renderDocumentStream(filteredDocuments);
+  }
+
+  function sortDocuments(docs, sortKey) {
+    switch (sortKey) {
+      case 'citations-desc':
+        docs.sort((a, b) => (b.metadata?.citationCount || 0) - (a.metadata?.citationCount || 0));
+        break;
+      case 'date-desc':
+        docs.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        break;
+      case 'date-asc':
+        docs.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        break;
+      case 'title-asc':
+        docs.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+        break;
+      case 'relevance':
+      default:
+        // Keep original OpenAlex relevance ranking order
+        docs.sort((a, b) => {
+          const indexA = rawDocuments.findIndex((item) => item.id === a.id);
+          const indexB = rawDocuments.findIndex((item) => item.id === b.id);
+          return indexA - indexB;
+        });
+        break;
+    }
+  }
+
+  function updateTypeCounts() {
+    const counts = { paper: 0, book: 0, report: 0, dataset: 0, repository: 0 };
+    rawDocuments.forEach((doc) => {
+      if (counts[doc.type] !== undefined) {
+        counts[doc.type]++;
+      } else {
+        counts.paper++;
+      }
+    });
+
+    dom.countPaper.textContent = counts.paper;
+    dom.countBook.textContent = counts.book;
+    dom.countReport.textContent = counts.report;
+    dom.countDataset.textContent = counts.dataset;
+    dom.countRepository.textContent = counts.repository;
+  }
+
+  function resetFilters() {
+    resetFiltersSilently();
+    applyFiltersAndSort();
+  }
+
+  function resetFiltersSilently() {
+    $$('input[name="type-filter"]').forEach((cb) => (cb.checked = true));
+    dom.dateFrom.value = '';
+    dom.dateTo.value = '';
+    dom.filterOA.checked = false;
+    dom.activeFilterIndicator.classList.add('hidden');
+  }
+
+  // ═══════════ RENDERING ═══════════
+  function renderDocumentStream(docs) {
+    dom.documentStream.innerHTML = '';
+
+    if (docs.length === 0) {
+      dom.noFilteredMessage.classList.remove('hidden');
+      return;
+    }
+
+    dom.noFilteredMessage.classList.add('hidden');
+
+    const fragment = document.createDocumentFragment();
+
+    docs.forEach((doc, idx) => {
+      const card = createDocumentCard(doc, idx);
+      fragment.appendChild(card);
+    });
+
+    dom.documentStream.appendChild(fragment);
+  }
+
+  function createDocumentCard(doc, index) {
+    const card = document.createElement('article');
+    card.className = 'document-card';
+    card.setAttribute('data-id', doc.id);
+
+    const typeLabel = formatDocType(doc.type);
+    const isOpenAccess = Boolean(doc.metadata?.openAccess);
+    const oaClass = isOpenAccess ? 'open' : 'closed';
+    const oaText = isOpenAccess ? 'Open Access' : 'Subscription';
+    const citationCount = doc.metadata?.citationCount ?? 0;
+    const authorsText = formatAuthors(doc.authors);
+    const venueText = doc.metadata?.venue ? doc.metadata.venue : '';
+
+    card.innerHTML = `
+      <div class="card-top-meta">
+        <span class="doc-type-badge">${escapeHTML(typeLabel)}</span>
+        <span class="doc-year">${escapeHTML(doc.date || 'Unknown Date')}</span>
+        <span class="doc-oa-badge ${oaClass}">${oaText}</span>
+      </div>
+
+      <a href="${escapeHTML(doc.url || '#')}" target="_blank" rel="noopener noreferrer" class="card-title-link">
+        <h3 class="card-title">${escapeHTML(doc.title)}</h3>
+      </a>
+
+      <p class="card-authors">${escapeHTML(authorsText)}</p>
+      ${venueText ? `<p class="card-venue">${escapeHTML(venueText)}</p>` : ''}
+
+      <div class="card-abstract-wrap">
+        <p class="card-abstract-text" id="abstract-${index}">${escapeHTML(doc.abstract)}</p>
+        ${doc.abstract && doc.abstract.length > 200 ? `
+          <button type="button" class="toggle-abstract-btn" data-target="abstract-${index}" aria-expanded="false">
+            Read full abstract ↓
+          </button>
+        ` : ''}
+      </div>
+
+      <div class="card-footer">
+        <div class="card-metrics">
+          <span>${citationCount.toLocaleString()} citations</span>
+          ${doc.metadata?.doi ? `<span>DOI: ${escapeHTML(doc.metadata.doi)}</span>` : ''}
+        </div>
+
+        <div class="card-actions">
+          <button type="button" class="card-action-btn view-details-btn" data-index="${index}">
+            Document Details
+          </button>
+          <a href="${escapeHTML(doc.url || '#')}" target="_blank" rel="noopener noreferrer" class="card-action-link">
+            Source ↗
+          </a>
+        </div>
+      </div>
+    `;
+
+    // Toggle Abstract Button
+    const toggleBtn = card.querySelector('.toggle-abstract-btn');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        const textEl = card.querySelector(`#${toggleBtn.dataset.target}`);
+        const isExpanded = textEl.classList.toggle('expanded');
+        toggleBtn.setAttribute('aria-expanded', isExpanded);
+        toggleBtn.textContent = isExpanded ? 'Collapse abstract ↑' : 'Read full abstract ↓';
+      });
+    }
+
+    // View Details Button
+    const detailsBtn = card.querySelector('.view-details-btn');
+    if (detailsBtn) {
+      detailsBtn.addEventListener('click', () => openModal(doc));
+    }
+
+    return card;
+  }
+
+  // ═══════════ DETAIL MODAL ═══════════
+  function openModal(doc) {
+    dom.modalDocType.textContent = formatDocType(doc.type);
+    dom.modalDate.textContent = doc.date || 'Unknown';
+    dom.modalOA.textContent = doc.metadata?.openAccess ? '✓ Open Access' : 'Subscription Required';
+    dom.modalTitle.textContent = doc.title;
+    dom.modalAuthors.textContent = (doc.authors || []).join(', ');
+    dom.modalVenue.textContent = doc.metadata?.venue ? `Published in: ${doc.metadata.venue}` : '';
+    dom.modalAbstractText.textContent = doc.abstract || 'No abstract text available in index.';
+
+    // Metadata Grid
+    dom.modalMetaGrid.innerHTML = `
+      <div class="modal-meta-item">
+        <span class="modal-meta-label">Citations</span>
+        <span class="modal-meta-value">${(doc.metadata?.citationCount || 0).toLocaleString()}</span>
+      </div>
+      <div class="modal-meta-item">
+        <span class="modal-meta-label">Referenced Works</span>
+        <span class="modal-meta-value">${doc.metadata?.referencedWorksCount || 0}</span>
+      </div>
+      <div class="modal-meta-item">
+        <span class="modal-meta-label">Catalog ID</span>
+        <span class="modal-meta-value">${escapeHTML(doc.id)}</span>
+      </div>
+      <div class="modal-meta-item">
+        <span class="modal-meta-label">DOI</span>
+        <span class="modal-meta-value">${doc.metadata?.doi ? escapeHTML(doc.metadata.doi) : 'N/A'}</span>
+      </div>
+    `;
+
+    // Modal Actions
+    dom.modalFooterActions.innerHTML = `
+      <a href="${escapeHTML(doc.url || '#')}" target="_blank" rel="noopener noreferrer" class="modal-action-btn">
+        Open Landing Page ↗
+      </a>
+      ${doc.metadata?.openAccessPdf ? `
+        <a href="${escapeHTML(doc.metadata.openAccessPdf)}" target="_blank" rel="noopener noreferrer" class="modal-action-btn">
+          View Open Access PDF ↗
+        </a>
+      ` : ''}
+      <button type="button" class="modal-action-btn-secondary" id="modal-copy-cite-btn">
+        Copy Citation (APA)
+      </button>
+    `;
+
+    const copyCiteBtn = $('#modal-copy-cite-btn');
+    if (copyCiteBtn) {
+      copyCiteBtn.addEventListener('click', () => {
+        const citation = generateAPACitation(doc);
+        navigator.clipboard.writeText(citation).then(() => {
+          copyCiteBtn.textContent = 'Copied!';
+          setTimeout(() => { copyCiteBtn.textContent = 'Copy Citation (APA)'; }, 2000);
+        });
+      });
+    }
+
+    dom.modalBackdrop.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal() {
+    dom.modalBackdrop.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+
+  // ═══════════ EXPORT (CSV / JSON) ═══════════
+  function exportCSV() {
+    if (filteredDocuments.length === 0) return;
+
+    const headers = [
+      'ID',
+      'Title',
+      'Authors',
+      'Publication Date',
+      'Type',
+      'Venue',
+      'DOI',
+      'Citations',
+      'Open Access',
+      'URL',
+    ];
+
+    const rows = filteredDocuments.map((doc) => [
+      `"${(doc.id || '').replace(/"/g, '""')}"`,
+      `"${(doc.title || '').replace(/"/g, '""')}"`,
+      `"${(doc.authors || []).join('; ').replace(/"/g, '""')}"`,
+      `"${doc.date || ''}"`,
+      `"${doc.type || ''}"`,
+      `"${(doc.metadata?.venue || '').replace(/"/g, '""')}"`,
+      `"${doc.metadata?.doi || ''}"`,
+      doc.metadata?.citationCount ?? 0,
+      doc.metadata?.openAccess ? 'true' : 'false',
+      `"${doc.url || ''}"`,
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    downloadFile(csvContent, `document_discovery_${sanitizeFilename(activeQuery)}.csv`);
+  }
+
+  function exportJSON() {
+    if (filteredDocuments.length === 0) return;
+
+    const exportData = {
+      query: activeQuery,
+      total_exported: filteredDocuments.length,
+      timestamp: new Date().toISOString(),
+      source: 'openalex',
+      results: filteredDocuments,
+    };
+
+    const jsonContent = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportData, null, 2));
+    downloadFile(jsonContent, `document_discovery_${sanitizeFilename(activeQuery)}.json`);
+  }
+
+  function copyRawJson() {
+    if (!lastApiResponse) return;
+    navigator.clipboard.writeText(JSON.stringify(lastApiResponse, null, 2)).then(() => {
+      dom.copyJsonBtn.textContent = 'Copied!';
+      setTimeout(() => { dom.copyJsonBtn.textContent = 'Copy Payload'; }, 2000);
+    });
+  }
+
+  function downloadFile(uriContent, filename) {
+    const link = document.createElement('a');
+    link.setAttribute('href', uriContent);
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // ═══════════ STATE DISPLAY MANAGEMENT ═══════════
   function showState(state) {
     dom.emptyState.classList.toggle('hidden', state !== 'empty');
     dom.loadingState.classList.toggle('hidden', state !== 'loading');
     dom.errorState.classList.toggle('hidden', state !== 'error');
-    dom.resultsContainer.classList.toggle('hidden', state !== 'results');
+    dom.resultsView.classList.toggle('hidden', state !== 'results');
   }
 
   function showError(title, message) {
@@ -247,417 +584,104 @@
     showState('error');
   }
 
-  function setLoadingStep(step) {
-    const steps = ['search', 'classify', 'render'];
-    const current = steps.indexOf(step);
-
-    [dom.stepSearch, dom.stepClassify, dom.stepRender].forEach((el, i) => {
-      el.classList.remove('active', 'done');
-      if (i < current) el.classList.add('done');
-      else if (i === current) el.classList.add('active');
-    });
-
-    const texts = {
-      search: 'Searching papers…',
-      classify: 'Detecting relationships…',
-      render: 'Building results…',
-    };
-    dom.loadingText.textContent = texts[step] || 'Loading…';
+  function startProgressBar() {
+    dom.progressBar.className = 'top-progress-bar active';
   }
 
-  function resetToEmpty() {
-    dom.input.value = '';
-    dom.clearBtn.classList.add('hidden');
-    currentResults = [];
-    filteredResults = [];
-    lastResponse = null;
-    dom.jsonView.classList.add('hidden');
-    showState('empty');
-    dom.input.focus();
+  function completeProgressBar() {
+    dom.progressBar.className = 'top-progress-bar complete';
+    setTimeout(() => {
+      dom.progressBar.className = 'top-progress-bar';
+    }, 400);
   }
 
-  // ═══════════ TABLE RENDERING ═══════════
-  function renderTable() {
-    dom.tbody.innerHTML = '';
-
-    if (filteredResults.length === 0) {
-      dom.noFilteredResults.classList.remove('hidden');
-      return;
-    }
-
-    dom.noFilteredResults.classList.add('hidden');
-
-    const fragment = document.createDocumentFragment();
-
-    filteredResults.forEach((paper, index) => {
-      const tr = document.createElement('tr');
-      const relType = paper.relationships?.primary?.type || '';
-      tr.setAttribute('data-rel', relType);
-      tr.setAttribute('data-index', index.toString());
-
-      tr.addEventListener('click', () => openModal(paper));
-
-      const authorsStr = (paper.authors || []).join(', ');
-      const truncAuthors = authorsStr.length > 40
-        ? authorsStr.substring(0, 37) + '…'
-        : authorsStr;
-
-      const relLabel = formatRelType(relType);
-      const confidence = paper.relationships?.primary?.confidence || '';
-
-      tr.innerHTML = `
-        <td class="cell-title">${escapeHTML(paper.title)}</td>
-        <td class="cell-authors" title="${escapeHTML(authorsStr)}">${escapeHTML(truncAuthors)}</td>
-        <td class="cell-date">${escapeHTML(paper.date)}</td>
-        <td class="cell-citations">${paper.metadata?.citation_count ?? '—'}</td>
-        <td>
-          ${relType
-            ? `<span class="rel-badge" data-type="${relType}">
-                ${relLabel}
-                ${confidence ? `<span class="rel-confidence">${confidence}</span>` : ''}
-              </span>`
-            : '<span class="rel-badge" style="opacity:0.4">—</span>'
-          }
-        </td>
-        <td class="access-icon">${paper.metadata?.open_access ? '🔓' : '🔒'}</td>
-      `;
-
-      fragment.appendChild(tr);
-    });
-
-    dom.tbody.appendChild(fragment);
-  }
-
-  function formatRelType(type) {
-    const labels = {
-      'conceptually-similar': 'Similar',
-      'builds-on': 'Builds on',
-      'responds-to': 'Responds to',
-      'alternative-method': 'Alternative',
-      'explicit-critique': 'Critique',
-      'shared-dataset': 'Shared data',
-    };
-    return labels[type] || type || '—';
-  }
-
-  // ═══════════ SORTING ═══════════
-  function handleSort(column) {
-    if (sortColumn === column) {
-      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-      sortColumn = column;
-      sortDirection = 'asc';
-    }
-
-    // Update indicators
-    $$('.sort-indicator').forEach((el) => {
-      el.className = 'sort-indicator';
-    });
-    const activeHeader = $(`.results-table thead th[data-sort="${column}"]`);
-    if (activeHeader) {
-      activeHeader.querySelector('.sort-indicator').classList.add(sortDirection);
-    }
-
-    sortResults();
-    renderTable();
-  }
-
-  function sortResults() {
-    if (!sortColumn) return;
-
-    const dir = sortDirection === 'asc' ? 1 : -1;
-
-    filteredResults.sort((a, b) => {
-      let va, vb;
-
-      switch (sortColumn) {
-        case 'title':
-          va = (a.title || '').toLowerCase();
-          vb = (b.title || '').toLowerCase();
-          return va < vb ? -dir : va > vb ? dir : 0;
-        case 'authors':
-          va = (a.authors?.[0] || '').toLowerCase();
-          vb = (b.authors?.[0] || '').toLowerCase();
-          return va < vb ? -dir : va > vb ? dir : 0;
-        case 'date':
-          va = parseInt(a.date, 10) || 0;
-          vb = parseInt(b.date, 10) || 0;
-          return (va - vb) * dir;
-        case 'citations':
-          va = a.metadata?.citation_count ?? 0;
-          vb = b.metadata?.citation_count ?? 0;
-          return (va - vb) * dir;
-        default:
-          return 0;
-      }
-    });
-  }
-
-  // ═══════════ FILTERING ═══════════
-  function applyFilters() {
-    // Relationship type checkboxes
-    const checkedRels = new Set();
-    $$('.filter-sidebar .filter-section:first-child input[type="checkbox"]').forEach((cb) => {
-      if (cb.checked) checkedRels.add(cb.value);
-    });
-
-    // Date range
-    const fromYear = parseInt(dom.dateFrom.value, 10) || 0;
-    const toYear = parseInt(dom.dateTo.value, 10) || 9999;
-
-    // Open access
-    const oaOnly = dom.filterOA.checked;
-
-    filteredResults = currentResults.filter((paper) => {
-      // Relationship filter
-      const relType = paper.relationships?.primary?.type || '';
-      if (relType && !checkedRels.has(relType)) return false;
-      // If no relationship but all checkboxes checked, keep it
-      if (!relType && checkedRels.size < 6) return false;
-
-      // Date filter
-      const year = parseInt(paper.date, 10) || 0;
-      if (year && (year < fromYear || year > toYear)) return false;
-
-      // Open access filter
-      if (oaOnly && !paper.metadata?.open_access) return false;
-
-      return true;
-    });
-
-    // Maintain sort
-    sortResults();
-    renderTable();
-    updateFilterBadge();
-  }
-
-  function resetFilters(rerender = true) {
-    // Reset checkboxes
-    $$('.filter-sidebar .filter-section:first-child input[type="checkbox"]').forEach((cb) => {
-      cb.checked = true;
-    });
-    dom.dateFrom.value = '';
-    dom.dateTo.value = '';
-    dom.filterOA.checked = false;
-
-    if (rerender) {
-      applyFilters();
-    }
-  }
-
-  function updateFilterBadge() {
-    let count = 0;
-
-    // Count unchecked relationship filters
-    $$('.filter-sidebar .filter-section:first-child input[type="checkbox"]').forEach((cb) => {
-      if (!cb.checked) count++;
-    });
-
-    if (dom.dateFrom.value) count++;
-    if (dom.dateTo.value) count++;
-    if (dom.filterOA.checked) count++;
-
-    dom.filterBadge.classList.toggle('hidden', count === 0);
-    dom.filterBadgeCount.textContent = count;
-  }
-
-  // ═══════════ MODAL ═══════════
-  function openModal(paper) {
-    dom.modalTitle.textContent = paper.title || 'Untitled';
-    dom.modalAuthors.textContent = (paper.authors || []).join(', ') || 'Unknown';
-
-    // Meta tags
-    dom.modalMeta.innerHTML = '';
-    const metaTags = [];
-    if (paper.date) metaTags.push(paper.date);
-    if (paper.metadata?.venue) metaTags.push(paper.metadata.venue);
-    if (paper.metadata?.citation_count != null) metaTags.push(`${paper.metadata.citation_count} citations`);
-    if (paper.metadata?.open_access) metaTags.push('Open Access');
-    if (paper.metadata?.doi) metaTags.push(`DOI: ${paper.metadata.doi}`);
-
-    metaTags.forEach((tag) => {
-      const span = document.createElement('span');
-      span.className = 'modal-meta-tag';
-      span.textContent = tag;
-      dom.modalMeta.appendChild(span);
-    });
-
-    // Relationships
-    dom.modalRelationships.innerHTML = '';
-    const primary = paper.relationships?.primary;
-    if (primary && primary.type) {
-      const div = document.createElement('div');
-      div.className = 'modal-rel-item';
-      div.innerHTML = `
-        <span class="rel-badge" data-type="${primary.type}">
-          ${formatRelType(primary.type)}
-          <span class="rel-confidence">${primary.confidence || ''}</span>
-        </span>
-        <p class="modal-rel-evidence">${escapeHTML(primary.evidence || '')}</p>
-      `;
-      dom.modalRelationships.appendChild(div);
-    }
-
-    const secondary = paper.relationships?.secondary || [];
-    secondary.forEach((rel) => {
-      const div = document.createElement('div');
-      div.className = 'modal-rel-item';
-      div.innerHTML = `
-        <span class="rel-badge" data-type="${rel.type}">
-          ${formatRelType(rel.type)}
-          <span class="rel-confidence">${rel.confidence || ''}</span>
-        </span>
-        <p class="modal-rel-evidence">${escapeHTML(rel.evidence || '')}</p>
-      `;
-      dom.modalRelationships.appendChild(div);
-    });
-
-    // Abstract
-    dom.modalAbstract.textContent = paper.abstract || 'No abstract available.';
-
-    // Links
-    dom.modalLinks.innerHTML = '';
-    if (paper.url) {
-      const a = document.createElement('a');
-      a.className = 'modal-link';
-      a.href = paper.url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.textContent = '📄 View Paper';
-      dom.modalLinks.appendChild(a);
-    }
-    if (paper.metadata?.open_access_pdf) {
-      const a = document.createElement('a');
-      a.className = 'modal-link';
-      a.href = paper.metadata.open_access_pdf;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.textContent = '📥 Download PDF';
-      dom.modalLinks.appendChild(a);
-    }
-    if (paper.metadata?.doi) {
-      const a = document.createElement('a');
-      a.className = 'modal-link';
-      a.href = `https://doi.org/${paper.metadata.doi}`;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.textContent = '🔗 DOI Link';
-      dom.modalLinks.appendChild(a);
-    }
-
-    dom.modalOverlay.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-    dom.modalClose.focus();
-  }
-
-  function closeModal() {
-    dom.modalOverlay.classList.add('hidden');
-    document.body.style.overflow = '';
-  }
-
-  // ═══════════ CSV EXPORT ═══════════
-  function exportCSV() {
-    if (filteredResults.length === 0) return;
-
-    const headers = ['Title', 'Authors', 'Date', 'Citations', 'Relationship', 'Confidence', 'Evidence', 'Open Access', 'URL', 'DOI', 'Venue'];
-    const rows = filteredResults.map((p) => [
-      csvEscape(p.title),
-      csvEscape((p.authors || []).join('; ')),
-      p.date || '',
-      p.metadata?.citation_count ?? '',
-      p.relationships?.primary?.type || '',
-      p.relationships?.primary?.confidence || '',
-      csvEscape(p.relationships?.primary?.evidence || ''),
-      p.metadata?.open_access ? 'Yes' : 'No',
-      p.url || '',
-      p.metadata?.doi || '',
-      csvEscape(p.metadata?.venue || ''),
-    ]);
-
-    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `research_${lastQuery.replace(/\s+/g, '_').substring(0, 30)}_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function csvEscape(str) {
-    if (!str) return '';
-    if (/[",\n\r]/.test(str)) {
-      return '"' + str.replace(/"/g, '""') + '"';
-    }
-    return str;
-  }
-
-  // ═══════════ JSON VIEW ═══════════
-  function toggleJSON() {
-    const isHidden = dom.jsonView.classList.contains('hidden');
-    dom.jsonView.classList.toggle('hidden');
-
-    if (isHidden && lastResponse) {
-      dom.jsonContent.textContent = JSON.stringify(lastResponse, null, 2);
-    }
-  }
-
-  function copyJSON() {
-    if (!lastResponse) return;
-    navigator.clipboard.writeText(JSON.stringify(lastResponse, null, 2)).then(() => {
-      const original = dom.jsonCopyBtn.textContent;
-      dom.jsonCopyBtn.textContent = 'Copied!';
-      setTimeout(() => { dom.jsonCopyBtn.textContent = original; }, 1500);
-    });
+  function resetProgressBar() {
+    dom.progressBar.className = 'top-progress-bar';
   }
 
   // ═══════════ RECENT SEARCHES ═══════════
-  function loadRecentSearches() {
-    const recent = getRecentSearches();
-    if (recent.length === 0) return;
-
-    dom.recentContainer.classList.remove('hidden');
-    dom.recentList.innerHTML = '';
-
-    recent.forEach((q) => {
-      const chip = document.createElement('button');
-      chip.className = 'recent-chip';
-      chip.textContent = q;
-      chip.addEventListener('click', () => {
-        dom.input.value = q;
-        dom.clearBtn.classList.remove('hidden');
-        dom.form.dispatchEvent(new Event('submit', { cancelable: true }));
-      });
-      dom.recentList.appendChild(chip);
-    });
-  }
-
-  function getRecentSearches() {
+  function saveRecentQuery(query) {
     try {
-      return JSON.parse(localStorage.getItem(RECENT_KEY)) || [];
-    } catch {
-      return [];
+      let recent = JSON.parse(localStorage.getItem(STORAGE_RECENT_KEY) || '[]');
+      recent = recent.filter((q) => q.toLowerCase() !== query.toLowerCase());
+      recent.unshift(query);
+      if (recent.length > MAX_RECENT_QUERIES) recent = recent.slice(0, MAX_RECENT_QUERIES);
+      localStorage.setItem(STORAGE_RECENT_KEY, JSON.stringify(recent));
+      renderRecentQueries();
+    } catch (e) {
+      console.warn('LocalStorage unavailable:', e);
     }
   }
 
-  function saveRecentSearch(query) {
-    let recent = getRecentSearches();
-    // Remove if exists, add to front
-    recent = recent.filter((q) => q.toLowerCase() !== query.toLowerCase());
-    recent.unshift(query);
-    recent = recent.slice(0, MAX_RECENT);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
-    loadRecentSearches();
+  function renderRecentQueries() {
+    try {
+      const recent = JSON.parse(localStorage.getItem(STORAGE_RECENT_KEY) || '[]');
+      if (recent.length === 0) {
+        dom.recentContainer.classList.add('hidden');
+        return;
+      }
+
+      dom.recentTags.innerHTML = '';
+      recent.forEach((q) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'recent-query-chip';
+        btn.textContent = q;
+        btn.addEventListener('click', () => {
+          dom.input.value = q;
+          dom.clearBtn.classList.remove('hidden');
+          dom.form.dispatchEvent(new Event('submit', { cancelable: true }));
+        });
+        dom.recentTags.appendChild(btn);
+      });
+
+      dom.recentContainer.classList.remove('hidden');
+    } catch (e) {
+      dom.recentContainer.classList.add('hidden');
+    }
   }
 
-  // ═══════════ UTILS ═══════════
+  // ═══════════ HELPERS ═══════════
+  function formatDocType(type) {
+    switch (type) {
+      case 'book': return 'Book / Chapter';
+      case 'report': return 'Technical Report';
+      case 'dataset': return 'Dataset';
+      case 'repository': return 'Code Repository';
+      case 'paper':
+      default: return 'Research Paper';
+    }
+  }
+
+  function formatAuthors(authors) {
+    if (!authors || authors.length === 0) return 'Unknown Author';
+    if (authors.length <= 3) return authors.join(', ');
+    return `${authors.slice(0, 3).join(', ')} et al.`;
+  }
+
+  function generateAPACitation(doc) {
+    const authors = formatAuthors(doc.authors);
+    const year = doc.date ? doc.date.slice(0, 4) : 'n.d.';
+    const title = doc.title;
+    const venue = doc.metadata?.venue ? ` ${doc.metadata.venue}.` : '';
+    const doi = doc.metadata?.doi ? ` https://doi.org/${doc.metadata.doi}` : (doc.url ? ` ${doc.url}` : '');
+    return `${authors} (${year}). ${title}.${venue}${doi}`;
+  }
+
+  function sanitizeFilename(name) {
+    return (name || 'export').replace(/[^a-z0-9_-]/gi, '_').toLowerCase().slice(0, 30);
+  }
+
   function escapeHTML(str) {
     if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
-  // ═══════════ BOOT ═══════════
+  // Initialize application on DOM ready
   document.addEventListener('DOMContentLoaded', init);
 })();
