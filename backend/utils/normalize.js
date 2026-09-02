@@ -1,12 +1,12 @@
 /**
  * normalize.js — Transforms OpenAlex API results into the app's
- * standardized document schema. Handles missing fields gracefully.
+ * standardized unified Document schema. Handles missing fields gracefully.
  */
 
 const { reconstructAbstract, mapDocumentType } = require('../services/openalex');
 
 /**
- * Normalize a single OpenAlex work object into the application's document schema.
+ * Normalize a single OpenAlex work object into the unified Document schema.
  * @param {Object} work - Raw work object from OpenAlex API
  * @returns {Object} Normalized document object
  */
@@ -40,7 +40,7 @@ function normalizeWork(work) {
     work.primary_location?.landing_page_url ||
     work.open_access?.oa_url ||
     work.id ||
-    (doiClean ? `https://doi.org/${doiClean}` : null);
+    (doiClean ? `https://doi.org/${doiClean}` : '');
 
   const openAccessPdf = work.open_access?.oa_url || work.primary_location?.pdf_url || null;
   const isOpenAccess = Boolean(work.open_access?.is_oa);
@@ -53,25 +53,45 @@ function normalizeWork(work) {
     null;
 
   // Clean OpenAlex ID
-  const workId = work.id ? work.id.replace('https://openalex.org/', '') : String(Math.random());
+  const workId = work.id ? work.id.replace('https://openalex.org/', '') : String(Math.random()).slice(2);
 
   return {
     id: `openalex_${workId}`,
+    canonicalUrl: directUrl,
     title: work.title || work.display_name || 'Untitled Document',
-    authors: authorNames,
-    date: publicationDate,
     type: docType,
-    abstract: abstract,
+    date: publicationDate,
+    authors: authorNames,
     url: directUrl,
     metadata: {
-      openAccess: isOpenAccess,
-      openAccessPdf: openAccessPdf,
+      authors: authorNames,
+      published: publicationDate,
       doi: doiClean,
-      venue: venue,
+      venue,
       citationCount: work.cited_by_count ?? 0,
       source: 'openalex',
       referencedWorksCount: (work.referenced_works || []).length,
+      openAccess: isOpenAccess,
+      openAccessPdf,
     },
+    access: {
+      openAccess: isOpenAccess,
+      license: work.open_access?.oa_status || null,
+      pdfUrl: openAccessPdf,
+    },
+    provenance: {
+      providers: [
+        {
+          provider: 'openalex',
+          source: 'openalex',
+          domain: 'openalex.org',
+          url: directUrl || `https://openalex.org/${workId}`,
+          retrievedAt: new Date().toISOString(),
+          confidence: 0.95,
+        },
+      ],
+    },
+    abstract,
   };
 }
 

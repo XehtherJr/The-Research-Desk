@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="AI-native document discovery engine. Search, organize, and navigate papers, books, technical reports, datasets, and repositories via OpenAlex.">
-  <title>Document Discovery Engine — Research Library & Catalog</title>
+  <meta name="description" content="AI-native document discovery engine V1. Goal-relative discovery ranking, evidence evaluation, and multi-provider search across OpenAlex, Crossref, and company research.">
+  <title>Document Discovery Engine V1 — Intelligent Research Library</title>
   
   <!-- Typography: Crimson Pro (Display Serif) & Inter (Clean Sans) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Reading Progress / Loading Bar -->
+  <!-- Top Progress Indicator -->
   <div class="top-progress-bar" id="top-progress-bar" aria-hidden="true"></div>
 
   <div class="page-container">
@@ -22,25 +22,25 @@
     <header class="catalog-header" id="catalog-header">
       <div class="masthead">
         <div class="masthead-brand">
-          <span class="masthead-eyebrow">Public Research Index</span>
+          <span class="masthead-eyebrow">Discovery Architecture V1</span>
           <h1 class="masthead-title">Document Discovery Engine</h1>
         </div>
         <div class="masthead-meta">
-          <span class="catalog-status">Catalog: OpenAlex (250M+ Works)</span>
-          <span class="catalog-phase">Phase 1: Retrieval & Cataloging</span>
+          <span class="catalog-status">Providers: OpenAlex • Crossref • 9 Company Scrapers</span>
+          <span class="catalog-phase">Goal-Relative Discovery & Evidence Model</span>
         </div>
       </div>
 
       <!-- Search Section -->
-      <section class="search-section" aria-label="Document search">
+      <section class="search-section" aria-label="Document discovery search">
         <form class="search-form" id="search-form">
           <div class="search-input-container">
-            <label for="search-input" class="sr-only">Search documents</label>
+            <label for="search-input" class="sr-only">Research query or goal</label>
             <input
               type="search"
               id="search-input"
               class="search-input"
-              placeholder="Search papers, books, technical reports, datasets, and code repositories..."
+              placeholder="Enter your research goal (e.g. 'I want to build a system that detects hallucinations in LLMs')..."
               autocomplete="off"
               spellcheck="false"
               required
@@ -53,28 +53,28 @@
           <div class="search-controls">
             <div class="limit-group">
               <label for="limit-slider" class="control-label">
-                Fetch Limit: <span class="limit-number" id="limit-value">25</span>
+                Discovery Target: <span class="limit-number" id="limit-value">20</span> docs
               </label>
               <input
                 type="range"
                 id="limit-slider"
                 class="limit-slider"
-                min="10"
-                max="100"
-                value="25"
-                step="5"
+                min="15"
+                max="25"
+                value="20"
+                step="1"
                 aria-label="Result count limit"
               >
             </div>
 
             <button type="submit" class="search-submit-btn" id="search-btn">
-              Search Catalog
+              Discover Documents
             </button>
           </div>
         </form>
 
         <p class="search-hint">
-          Indexes peer-reviewed papers, book chapters, technical preprints, empirical datasets, and official reports.
+          Infers your research intent, queries scholarly indexes and 9 institutional labs, evaluates evidence, and organizes results by role.
         </p>
 
         <!-- Recent Queries -->
@@ -91,16 +91,16 @@
       <!-- Initial Empty State -->
       <section class="state-container empty-state" id="empty-state">
         <div class="state-box">
-          <h2 class="state-title">Library Index & Document Retrieval</h2>
+          <h2 class="state-title">Goal-Oriented Document Discovery</h2>
           <p class="state-description">
-            Enter any topic, keyword, or author name to explore structured knowledge across multiple publication categories.
+            Describe what you want to learn, build, or investigate. The engine analyzes your research goal, queries OpenAlex, Crossref, and leading research labs (Anthropic, OpenAI, DeepMind, Meta, Microsoft, Apple, NVIDIA, NASA, Genentech), and delivers evaluated, role-organized sources.
           </p>
           <div class="sample-queries">
-            <span class="sample-label">Sample queries:</span>
-            <button type="button" class="sample-btn" data-query="quantum error correction surface codes">Quantum error correction</button>
-            <button type="button" class="sample-btn" data-query="hallucination detection large language models">LLM hallucination detection</button>
-            <button type="button" class="sample-btn" data-query="climate change adaptation dataset">Climate adaptation datasets</button>
-            <button type="button" class="sample-btn" data-query="graph neural networks book">Graph neural networks</button>
+            <span class="sample-label">Try research goal queries:</span>
+            <button type="button" class="sample-btn" data-query="I want to build a system that detects hallucinations in LLMs">Build LLM Hallucination Detection</button>
+            <button type="button" class="sample-btn" data-query="quantum error correction surface codes threshold">Quantum Error Correction Thresholds</button>
+            <button type="button" class="sample-btn" data-query="deep learning for protein antibody design benchmarks">Antibody & Protein Design Benchmarks</button>
+            <button type="button" class="sample-btn" data-query="climate change adaptation satellite telemetry dataset">Climate Satellite Telemetry Datasets</button>
           </div>
         </div>
       </section>
@@ -109,68 +109,105 @@
       <section class="state-container loading-state hidden" id="loading-state">
         <div class="state-box">
           <div class="loading-rule"></div>
-          <h2 class="state-title" id="loading-status-text">Searching OpenAlex catalog...</h2>
-          <p class="state-description">Retrieving citations, metadata, and abstracts from index.</p>
+          <h2 class="state-title" id="loading-status-text">Executing Discovery Pipeline...</h2>
+          <p class="state-description" id="loading-subtext">Planning search strategy • Querying providers • Evaluating evidence</p>
+          <div class="loading-stages">
+            <span class="stage-pill active" id="stage-plan">1. Intent Plan</span>
+            <span class="stage-pill" id="stage-retrieve">2. Multi-Retrieve</span>
+            <span class="stage-pill" id="stage-eval">3. Evidence Eval</span>
+            <span class="stage-pill" id="stage-rank">4. Discovery Rank</span>
+          </div>
         </div>
       </section>
 
       <!-- Error State -->
       <section class="state-container error-state hidden" id="error-state">
         <div class="state-box">
-          <h2 class="state-title" id="error-title">Something went wrong</h2>
-          <p class="state-description" id="error-message">Unable to fetch search results from the catalog.</p>
-          <button type="button" class="button-secondary" id="retry-btn">Retry Search</button>
+          <h2 class="state-title" id="error-title">Discovery Interrupted</h2>
+          <p class="state-description" id="error-message">Unable to complete the discovery pipeline.</p>
+          <button type="button" class="button-secondary" id="retry-btn">Retry Discovery</button>
         </div>
       </section>
 
       <!-- Results View -->
       <section class="results-view hidden" id="results-view">
-        
-        <!-- Signature Element: Taxonomy & Reading Structure Indicator -->
-        <aside class="taxonomy-banner" id="taxonomy-banner">
-          <div class="taxonomy-header">
-            <span class="taxonomy-tag">Taxonomy Framework</span>
-            <span class="taxonomy-title">Document Structure & Research Progression</span>
-          </div>
-          <div class="taxonomy-path">
-            <div class="taxonomy-node">
-              <span class="node-level">Level 01</span>
-              <span class="node-title">Foundations</span>
-              <span class="node-desc">Theoretical background, literature surveys, and core principles</span>
-            </div>
-            <div class="taxonomy-connector" aria-hidden="true">→</div>
-            <div class="taxonomy-node">
-              <span class="node-level">Level 02</span>
-              <span class="node-title">Applied & Methods</span>
-              <span class="node-desc">Empirical methodologies, architectures, and experiments</span>
-            </div>
-            <div class="taxonomy-connector" aria-hidden="true">→</div>
-            <div class="taxonomy-node">
-              <span class="node-level">Level 03</span>
-              <span class="node-title">Data & Assets</span>
-              <span class="node-desc">Benchmarks, datasets, monographs, and software tools</span>
-            </div>
-          </div>
-        </aside>
 
-        <!-- Results Control Bar -->
+        <!-- ═══════════ SEARCHPLAN PRESENTATION ═══════════ -->
+        <section class="search-plan-panel" id="search-plan-panel">
+          <div class="plan-header">
+            <div class="plan-header-title-wrap">
+              <span class="plan-tag">Discovery Strategy</span>
+              <h2 class="plan-title">Why These Results?</h2>
+            </div>
+            <button type="button" class="plan-toggle-btn" id="plan-toggle-btn" aria-expanded="true">
+              Collapse Strategy
+            </button>
+          </div>
+
+          <div class="plan-body" id="plan-body">
+            <div class="plan-grid">
+              <!-- Goal & Intent -->
+              <div class="plan-col">
+                <span class="plan-label">Detected Goal</span>
+                <p class="plan-goal-text" id="plan-goal">User Research Objective</p>
+                <div class="plan-intent-badge-wrap">
+                  <span class="intent-pill" id="plan-intent-pill">building</span>
+                  <span class="plan-confidence" id="plan-confidence">Confidence: 92%</span>
+                </div>
+              </div>
+
+              <!-- Evidence Needs -->
+              <div class="plan-col">
+                <span class="plan-label">Evidence Needs Identified</span>
+                <ul class="plan-evidence-list" id="plan-evidence-list">
+                  <!-- Populated dynamically -->
+                </ul>
+              </div>
+
+              <!-- Reading Path -->
+              <div class="plan-col">
+                <span class="plan-label">Suggested Reading Path</span>
+                <ol class="plan-path-list">
+                  <li><strong>Foundational:</strong> Literature surveys & core theories</li>
+                  <li><strong>Applied & Methods:</strong> Architectures & detection methods</li>
+                  <li><strong>Implementation:</strong> Working code & frameworks</li>
+                  <li><strong>Data & Assets:</strong> Standard benchmark datasets</li>
+                </ol>
+              </div>
+            </div>
+
+            <p class="plan-reasoning" id="plan-reasoning"></p>
+
+            <div class="plan-footer-actions">
+              <button type="button" class="plan-json-toggle" id="plan-json-toggle">
+                View SearchPlan JSON
+              </button>
+            </div>
+
+            <div class="plan-json-view hidden" id="plan-json-view">
+              <pre class="plan-json-code" id="plan-json-code"></pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- ═══════════ RESULTS CONTROL & ROLE TABS ═══════════ -->
         <div class="results-control-bar">
           <div class="results-stats">
-            <span class="results-count-text" id="results-count">0 documents found</span>
+            <span class="results-count-text" id="results-count">0 curated documents</span>
             <span class="results-timing" id="results-timing"></span>
-            <span class="source-provenance">Catalog: <strong>OpenAlex</strong></span>
+            <span class="source-provenance" id="source-provenance">Providers: OpenAlex • Crossref • Company Scrapers</span>
           </div>
 
           <div class="results-actions">
             <!-- Sort dropdown -->
             <div class="sort-control">
-              <label for="sort-select" class="sort-label">Sort by:</label>
-              <select id="sort-select" class="sort-select" aria-label="Sort results by">
+              <label for="sort-select" class="sort-label">Order by:</label>
+              <select id="sort-select" class="sort-select" aria-label="Order results by">
+                <option value="discovery">Discovery Rank (Goal Fit + Diversity)</option>
+                <option value="goal-fit">Goal Fit (Highest)</option>
                 <option value="relevance">Relevance</option>
-                <option value="citations-desc">Citations (Highest)</option>
-                <option value="date-desc">Date (Newest)</option>
-                <option value="date-asc">Date (Oldest)</option>
-                <option value="title-asc">Title (A–Z)</option>
+                <option value="citations">Citations (Highest)</option>
+                <option value="date-newest">Date (Newest)</option>
               </select>
             </div>
 
@@ -184,14 +221,43 @@
           </div>
         </div>
 
-        <!-- Layout Grid: Sidebar Filters + Document Stream -->
+        <!-- Role Filter Tabs -->
+        <nav class="role-filter-tabs" aria-label="Filter by research role">
+          <button type="button" class="role-tab active" data-role="all">All Roles (<span id="tab-count-all">0</span>)</button>
+          <button type="button" class="role-tab" data-role="foundational">Foundational (<span id="tab-count-foundational">0</span>)</button>
+          <button type="button" class="role-tab" data-role="applied">Applied & Methods (<span id="tab-count-applied">0</span>)</button>
+          <button type="button" class="role-tab" data-role="implementation">Implementation (<span id="tab-count-implementation">0</span>)</button>
+          <button type="button" class="role-tab" data-role="dataset">Data & Assets (<span id="tab-count-dataset">0</span>)</button>
+          <button type="button" class="role-tab" data-role="alternative">Alternative Perspectives (<span id="tab-count-alternative">0</span>)</button>
+        </nav>
+
+        <!-- ═══════════ LAYOUT: SIDEBAR FILTERS + RESULTS ═══════════ -->
         <div class="results-layout">
           
           <!-- Filters Sidebar -->
           <aside class="filters-panel" id="filters-panel">
             <div class="filters-header">
-              <h3 class="filters-title">Filters</h3>
-              <button type="button" class="filter-reset-link" id="filter-reset-btn">Reset</button>
+              <h3 class="filters-title">Refine Results</h3>
+              <button type="button" class="filter-reset-link" id="filter-reset-btn">Reset All</button>
+            </div>
+
+            <!-- Provider Filter -->
+            <div class="filter-block">
+              <h4 class="filter-label">Discovered Via</h4>
+              <div class="filter-options">
+                <label class="filter-item">
+                  <input type="checkbox" name="provider-filter" value="openalex" checked>
+                  <span class="filter-text">OpenAlex</span>
+                </label>
+                <label class="filter-item">
+                  <input type="checkbox" name="provider-filter" value="crossref" checked>
+                  <span class="filter-text">Crossref</span>
+                </label>
+                <label class="filter-item">
+                  <input type="checkbox" name="provider-filter" value="company" checked>
+                  <span class="filter-text">Company Research Scrapers</span>
+                </label>
+              </div>
             </div>
 
             <!-- Document Type Filter -->
@@ -201,32 +267,27 @@
                 <label class="filter-item">
                   <input type="checkbox" name="type-filter" value="paper" checked>
                   <span class="filter-text">Research Paper</span>
-                  <span class="filter-count" id="count-paper">0</span>
-                </label>
-                <label class="filter-item">
-                  <input type="checkbox" name="type-filter" value="book" checked>
-                  <span class="filter-text">Book / Chapter</span>
-                  <span class="filter-count" id="count-book">0</span>
                 </label>
                 <label class="filter-item">
                   <input type="checkbox" name="type-filter" value="report" checked>
                   <span class="filter-text">Technical Report</span>
-                  <span class="filter-count" id="count-report">0</span>
+                </label>
+                <label class="filter-item">
+                  <input type="checkbox" name="type-filter" value="book" checked>
+                  <span class="filter-text">Book / Chapter</span>
                 </label>
                 <label class="filter-item">
                   <input type="checkbox" name="type-filter" value="dataset" checked>
                   <span class="filter-text">Dataset</span>
-                  <span class="filter-count" id="count-dataset">0</span>
                 </label>
                 <label class="filter-item">
                   <input type="checkbox" name="type-filter" value="repository" checked>
                   <span class="filter-text">Code Repository</span>
-                  <span class="filter-count" id="count-repository">0</span>
                 </label>
               </div>
             </div>
 
-            <!-- Date Range Filter -->
+            <!-- Publication Year Filter -->
             <div class="filter-block">
               <h4 class="filter-label">Publication Year</h4>
               <div class="date-inputs-row">
@@ -238,7 +299,7 @@
 
             <!-- Open Access Filter -->
             <div class="filter-block">
-              <h4 class="filter-label">Availability</h4>
+              <h4 class="filter-label">Access</h4>
               <label class="filter-item">
                 <input type="checkbox" id="filter-oa">
                 <span class="filter-text">Open Access Only</span>
@@ -250,25 +311,25 @@
           <div class="document-stream-wrap">
             <div class="active-filter-indicator hidden" id="active-filter-indicator">
               <span>Filtered view active</span>
-              <button type="button" id="clear-filters-link">Clear all filters</button>
+              <button type="button" id="clear-filters-link">Clear filters</button>
             </div>
 
             <div class="document-stream" id="document-stream">
-              <!-- Dynamically populated document cards -->
+              <!-- Dynamically populated role sections and cards -->
             </div>
 
             <!-- No filtered results message -->
             <div class="no-filtered-message hidden" id="no-filtered-message">
-              <p class="state-title">No documents match the active filter criteria.</p>
-              <p class="state-description">Try unchecking document type filters or broadening the year range.</p>
+              <p class="state-title">No documents match the current filter selection.</p>
+              <p class="state-description">Try enabling all roles, clearing date bounds, or selecting all providers.</p>
               <button type="button" class="button-secondary" id="reset-filters-inline-btn">Reset Filters</button>
             </div>
           </div>
         </div>
 
-        <!-- Raw JSON Inspection Accordion -->
+        <!-- Raw Pipeline Payload Inspector -->
         <details class="json-inspector" id="json-inspector">
-          <summary class="json-summary">Inspect Raw OpenAlex Response Payload</summary>
+          <summary class="json-summary">Inspect Raw V1 Discovery Pipeline Payload</summary>
           <div class="json-body">
             <button type="button" class="copy-json-btn" id="copy-json-btn">Copy Payload</button>
             <pre class="json-code" id="json-code"></pre>
@@ -281,8 +342,8 @@
     <!-- ═══════════ FOOTER ═══════════ -->
     <footer class="catalog-footer">
       <div class="footer-inner">
-        <p>Document Discovery Engine • Scholarly literature, preprints, and open datasets indexed via OpenAlex</p>
-        <p class="footer-license">Distributed under MIT License • No API Key required for Phase 1</p>
+        <p>Document Discovery Engine V1 • Multi-provider scholarly retrieval & goal-relative evidence evaluation</p>
+        <p class="footer-license">Distributed under MIT License • OpenAlex • Crossref • Institutional Research Scrapers</p>
       </div>
     </footer>
   </div>
@@ -292,7 +353,8 @@
     <div class="modal-card" id="modal-card">
       <div class="modal-header">
         <div class="modal-header-meta">
-          <span class="doc-type-badge" id="modal-doc-type">Document</span>
+          <span class="role-pill" id="modal-role-pill">Foundational</span>
+          <span class="doc-type-badge" id="modal-doc-type">Research Paper</span>
           <span class="modal-date" id="modal-date"></span>
           <span class="modal-oa" id="modal-oa"></span>
         </div>
@@ -304,15 +366,33 @@
         <p class="modal-authors" id="modal-authors">Authors</p>
         <p class="modal-venue" id="modal-venue"></p>
 
-        <div class="modal-meta-grid" id="modal-meta-grid">
-          <!-- Populated dynamically -->
+        <!-- Why Useful Banner in Modal -->
+        <div class="modal-why-useful">
+          <span class="why-useful-label">Why Useful for Goal:</span>
+          <p class="why-useful-text" id="modal-why-useful-text"></p>
         </div>
 
+        <!-- Evidence Findings Grid -->
+        <div class="modal-evidence-section">
+          <h3 class="modal-section-title">Evidence Extracted</h3>
+          <div class="modal-evidence-list" id="modal-evidence-list">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Provenance Details -->
+        <div class="modal-provenance-section">
+          <h3 class="modal-section-title">Provenance & Discovered Sources</h3>
+          <div class="modal-provenance-chips" id="modal-provenance-chips"></div>
+        </div>
+
+        <!-- Abstract -->
         <div class="modal-abstract-section">
           <h3 class="modal-section-title">Abstract</h3>
           <p class="modal-abstract-text" id="modal-abstract-text"></p>
         </div>
 
+        <!-- Actions -->
         <div class="modal-footer-actions" id="modal-footer-actions">
           <!-- Links populated dynamically -->
         </div>
