@@ -11,6 +11,8 @@ const reviews = Array.from({ length: MIN_LABELS }, (_, index) => ({
 }));
 const model = trainCalibration(reviews);
 assert.strictEqual(model.trained, true);
+assert.strictEqual(typeof model.promoted, 'boolean');
+assert.ok(model.validation && Number.isFinite(model.validation.baselineAccuracy));
 assert.ok(model.weights.length === 5);
 assert.strictEqual(trainCalibration(reviews.slice(0, MIN_LABELS - 1)).trained, false);
 console.log('Calibration tests passed.');

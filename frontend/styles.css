@@ -58,7 +58,14 @@ html {
   color: var(--text-main);
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
+  scrollbar-color: var(--accent) var(--bg-subtle);
+  scrollbar-width: thin;
 }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg-subtle); }
+::-webkit-scrollbar-thumb { background: var(--accent); border: 3px solid var(--bg-subtle); }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-dark); }
 
 body {
   font-family: var(--font-sans);
@@ -221,6 +228,15 @@ body {
   border-bottom: 2px solid var(--accent);
 }
 
+kbd {
+  border: 1px solid var(--border-dark);
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-main);
+  background: var(--bg-card);
+}
+
 .search-clear-btn {
   position: absolute;
   right: 0;
@@ -292,6 +308,8 @@ body {
   background-color: var(--accent-dark);
   border-color: var(--accent-dark);
 }
+
+.search-submit-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 
 .search-hint {
   font-size: 0.8125rem;
@@ -1116,6 +1134,14 @@ body {
 }
 .review-btn.selected { border-color: #37553c; background: #37553c; color: #f0e4c5; }
 
+.refinement-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 20px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.refinement-label, .library-search-label { color: var(--text-faint); font: 0.72rem var(--font-mono); text-transform: uppercase; letter-spacing: 0.04em; }
+.refinement-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.refinement-chip { border: 1px solid var(--border); background: var(--bg-card); color: var(--accent-dark); padding: 4px 8px; cursor: pointer; font: 0.75rem var(--font-mono); }
+.refinement-chip:hover { border-color: var(--accent); background: var(--accent-light); }
+.library-search-label { display: block; margin: 20px 0 6px; }
+.library-search { width: min(100%, 520px); padding: 10px; border: 1px solid var(--border-dark); background: var(--bg-card); color: var(--text-main); font: 0.9rem var(--font-sans); }
+
 /* ═══════════ JSON INSPECTOR ═══════════ */
 .json-inspector {
   border: 1px solid var(--border);
@@ -1178,6 +1204,7 @@ body {
   font-size: 0.8125rem;
   color: var(--text-faint);
   text-align: center;
+  min-height: 110px;
 }
 
 .footer-inner {
@@ -1189,6 +1216,8 @@ body {
 .footer-license {
   font-size: 0.75rem;
 }
+
+.catalog-footer a { color: var(--accent-dark); text-decoration: underline; text-underline-offset: 3px; }
 
 /* ═══════════ DOCUMENT DETAIL MODAL ═══════════ */
 .modal-backdrop {

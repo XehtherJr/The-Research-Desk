@@ -1,6 +1,6 @@
 const { listReviews } = require('./review-store');
 
-const MIN_LABELS = 20;
+const MIN_LABELS = 50;
 const FEATURE_KEYS = ['relevance', 'goalFit', 'evidenceQuality', 'semanticScore', 'coherence'];
 function sigmoid(value) { return 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, value)))); }
 function normalize(review) { return FEATURE_KEYS.map((key) => Math.max(0, Math.min(100, Number(review[key]) || 0)) / 100); }
@@ -19,7 +19,12 @@ function trainCalibration(reviews = listReviews()) {
       features.forEach((feature, index) => { weights[index] += error * feature * 0.08; });
     }
   }
-  return { trained: true, sampleSize: usable.length, intercept, weights, trainedAt: new Date().toISOString() };
+  const split = Math.max(1, Math.floor(usable.length * 0.2));
+  const validation = usable.slice(-split);
+  const baselineAccuracy = validation.filter((review) => (Number(review.relevance) >= 50) === (review.label === 'relevant')).length / validation.length;
+  const calibratedAccuracy = validation.filter((review) => (calibrateFeatures({ relevance: review.relevance, goalFit: review.goalFit, evidenceQuality: review.evidenceQuality, semanticScore: review.semanticScore, coherence: review.coherence }, { trained: true, intercept, weights }) >= 0.5) === (review.label === 'relevant')).length / validation.length;
+  const promoted = calibratedAccuracy >= baselineAccuracy;
+  return { trained: true, promoted, sampleSize: usable.length, intercept, weights, validation: { baselineAccuracy, calibratedAccuracy }, trainedAt: new Date().toISOString() };
 }
 
 let cachedModel = null;
@@ -33,7 +38,7 @@ function getCalibrationModel() {
   return cachedModel;
 }
 function calibrateFeatures(features, model = getCalibrationModel()) {
-  if (!model.trained) return null;
+  if (!model.trained || !model.promoted) return null;
   const vector = FEATURE_KEYS.map((key) => Math.max(0, Math.min(100, Number(features[key]) || 0)) / 100);
   return Number(sigmoid(model.intercept + model.weights.reduce((sum, weight, index) => sum + weight * vector[index], 0)).toFixed(4));
 }

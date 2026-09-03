@@ -7,7 +7,7 @@
     "dev": "node backend/server.js",
     "start": "node backend/server.js",
     "snapshots": "node scripts/refresh-citation-snapshots.js",
-    "test": "node tests/relevance.test.js && node tests/golden-set.test.js && node tests/citation-cache.test.js && node tests/snapshot.test.js && node tests/calibration.test.js && node tests/hardening.test.js",
+    "test": "node tests/relevance.test.js && node tests/golden-set.test.js && node tests/citation-cache.test.js && node tests/snapshot.test.js && node tests/calibration.test.js && node tests/hardening.test.js && node tests/frontend-features.test.js",
     "build": "echo \"Frontend is static; no build step needed\""
   },
   "keywords": [

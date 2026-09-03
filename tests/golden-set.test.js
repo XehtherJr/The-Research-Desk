@@ -5,7 +5,9 @@ const { buildRelevanceProfile, scoreDocumentRelevance } = require('../backend/se
 let passed = 0;
 let positiveChecks = 0;
 let negativeChecks = 0;
+let paraphraseCases = 0;
 for (const testCase of cases) {
+  if (testCase.paraphrase) paraphraseCases++;
   const profile = buildRelevanceProfile(testCase.query, testCase.query.split(/\s+/));
   for (const title of testCase.mustMatch) {
     positiveChecks++;
@@ -19,4 +21,4 @@ for (const testCase of cases) {
 }
 
 const totalChecks = positiveChecks + negativeChecks;
-console.log(`Golden relevance set passed: ${passed}/${cases.length} cases; precision proxy ${totalChecks}/${totalChecks} (${positiveChecks} positive, ${negativeChecks} negative checks)`);
+console.log(`Golden relevance set passed: ${passed}/${cases.length} cases; precision proxy ${totalChecks}/${totalChecks} (${positiveChecks} positive, ${negativeChecks} negative checks); paraphrase cases ${paraphraseCases}`);

@@ -79,7 +79,7 @@
           <div class="search-controls">
             <div class="limit-group">
               <label for="limit-slider" class="control-label">
-                Discovery Target: <span class="limit-number" id="limit-value">20</span> docs
+                Discovery depth: <span class="limit-number" id="limit-value">20</span> candidates
               </label>
               <input
                 type="range"
@@ -89,7 +89,7 @@
                 max="30"
                 value="20"
                 step="1"
-                aria-label="Result count limit"
+                aria-label="Discovery depth and evaluation budget"
               >
             </div>
 
@@ -100,7 +100,7 @@
         </form>
 
         <p class="search-hint">
-          Infers your research intent, queries scholarly indexes and 9 institutional labs, evaluates evidence, and organizes results by role.
+          Infers your intent, probes relevant sources, evaluates evidence, and organizes results by role. Press <kbd>/</kbd> to search.
         </p>
 
         <!-- Recent Queries -->
@@ -219,6 +219,10 @@
         </section>
 
         <!-- ═══════════ RESULTS CONTROL & ROLE TABS ═══════════ -->
+        <section class="refinement-strip hidden" id="refinement-strip" aria-label="Related search refinements">
+          <span class="refinement-label">Related terms</span>
+          <div class="refinement-chips" id="refinement-chips"></div>
+        </section>
         <div class="results-control-bar">
           <div class="results-stats">
             <span class="results-count-text" id="results-count">0 curated documents</span>
@@ -245,6 +249,9 @@
             <button type="button" class="export-btn" id="export-json-btn" aria-label="Export results as JSON">
               Export JSON
             </button>
+            <button type="button" class="export-btn" id="export-bibtex-btn" aria-label="Export results as BibTeX">BibTeX</button>
+            <button type="button" class="export-btn" id="export-markdown-btn" aria-label="Export results as Markdown">Markdown</button>
+            <button type="button" class="export-btn" id="export-jsonl-btn" aria-label="Export results as JSONL">JSONL</button>
           </div>
         </div>
 
@@ -354,11 +361,18 @@
         <div><span class="plan-tag">Your desk</span><h2 id="library-view-title">Saved Collections</h2></div>
         <button type="button" class="button-secondary" id="library-view-close">Back to discovery</button>
       </div>
+      <label class="library-search-label" for="library-search">Search this shelf</label>
+      <input type="search" class="library-search" id="library-search" placeholder="Search saved titles and notes" autocomplete="off">
       <div class="library-view-list" id="library-view-list"></div>
     </section>
 
     <!-- ═══════════ FOOTER ═══════════ -->
     <footer class="catalog-footer">
+      <div class="footer-inner">
+        <strong>The Research Desk</strong>
+        <span>Goal-relative document discovery with transparent evidence signals.</span>
+        <span class="footer-license">MIT licensed • <a href="/RECENT_UPDATES.md">Recent updates</a></span>
+      </div>
     </footer>
     </div>
   </div>
@@ -420,6 +434,7 @@
     </div>
   </div>
 
+  <script src="feature-utils.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

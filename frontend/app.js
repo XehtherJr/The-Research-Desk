@@ -39,6 +39,7 @@
     libraryViewTitle: $('#library-view-title'),
     libraryViewList: $('#library-view-list'),
     libraryViewClose: $('#library-view-close'),
+    librarySearch: $('#library-search'),
 
     // State Containers
     emptyState: $('#empty-state'),
@@ -72,6 +73,11 @@
     sortSelect: $('#sort-select'),
     exportCsvBtn: $('#export-csv-btn'),
     exportJsonBtn: $('#export-json-btn'),
+    exportBibtexBtn: $('#export-bibtex-btn'),
+    exportMarkdownBtn: $('#export-markdown-btn'),
+    exportJsonlBtn: $('#export-jsonl-btn'),
+    refinementStrip: $('#refinement-strip'),
+    refinementChips: $('#refinement-chips'),
 
     // Role Filter Tabs
     roleTabs: $$('.role-tab'),
@@ -226,6 +232,10 @@
     // Export Buttons
     dom.exportCsvBtn.addEventListener('click', exportCSV);
     dom.exportJsonBtn.addEventListener('click', exportJSON);
+    dom.exportBibtexBtn.addEventListener('click', exportBibTeX);
+    dom.exportMarkdownBtn.addEventListener('click', exportMarkdown);
+    dom.exportJsonlBtn.addEventListener('click', exportJSONL);
+    dom.librarySearch.addEventListener('input', () => renderLibraryEntries(dom.librarySearch.dataset.view || 'saved'));
 
     // Copy JSON Payload
     dom.copyJsonBtn.addEventListener('click', copyRawJson);
@@ -238,6 +248,10 @@
 
     // Keyboard Shortcuts
     document.addEventListener('keydown', (e) => {
+      if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
+        e.preventDefault();
+        dom.input.focus();
+      }
       if (e.key === 'Escape') {
         if (!dom.modalBackdrop.classList.contains('hidden')) {
           closeModal();
@@ -286,12 +300,16 @@
         : ['foundational', 'applied', 'implementation', 'dataset', 'alternative'];
       syncRoleTabs();
       fullDiscoveryResults = data.results || [];
+      renderRefinementChips(activeSearchPlan, fullDiscoveryResults);
 
       completeProgressBar();
 
       if (fullDiscoveryResults.length === 0) {
         const suggestions = data.metadata?.suggestions || ['Try broadening your terms.'];
-        showError('No High-Confidence Documents', suggestions.join(' '));
+        const diagnostics = data.metadata?.retrievedCandidates !== undefined
+          ? ` ${data.metadata.retrievedCandidates} candidates retrieved; ${data.metadata.rejectedBeforeEvaluation || 0} rejected before evaluation.`
+          : '';
+        showError('No High-Confidence Documents', suggestions.join(' ') + diagnostics);
         return;
       }
 
@@ -642,6 +660,7 @@
         <div class="card-actions">
           <button type="button" class="card-action-btn review-btn" data-review-label="relevant">Relevant</button>
           <button type="button" class="card-action-btn review-btn" data-review-label="not-relevant">Not relevant</button>
+          <button type="button" class="card-action-btn citation-copy-btn">Copy citation</button>
           <button type="button" class="card-action-btn library-action-btn" data-library-action="saved">Save</button>
           <button type="button" class="card-action-btn library-action-btn" data-library-action="later">Read Later</button>
           <button type="button" class="card-action-btn library-action-btn" data-library-action="read">Mark Read</button>
@@ -675,6 +694,11 @@
     card.querySelectorAll('.review-btn').forEach((button) => {
       button.addEventListener('click', () => submitReview(item, button.dataset.reviewLabel, button));
     });
+    const citationCopyButton = card.querySelector('.citation-copy-btn');
+    citationCopyButton.addEventListener('click', () => navigator.clipboard.writeText(generateAPACitation(doc)).then(() => {
+      citationCopyButton.textContent = 'Copied';
+      setTimeout(() => { citationCopyButton.textContent = 'Copy citation'; }, 1600);
+    }));
 
     return card;
   }
@@ -688,6 +712,8 @@
         body: JSON.stringify({
           query: activeQuery,
           documentId: item.document.id,
+          title: item.document.title,
+          abstract: item.document.abstract,
           label,
           useful: label === 'relevant',
           relevance: evaluation.relevance || 0,
@@ -848,6 +874,28 @@
     downloadFile(jsonContent, `discovery_${sanitizeFilename(activeQuery)}.json`);
   }
 
+  function exportJSONL() {
+    if (!filteredResults.length) return;
+    const content = filteredResults.map((item) => JSON.stringify(item)).join('\n') + '\n';
+    downloadFile('data:application/x-ndjson;charset=utf-8,' + encodeURIComponent(content), `discovery_${sanitizeFilename(activeQuery)}.jsonl`);
+  }
+
+  function exportMarkdown() {
+    if (!filteredResults.length) return;
+    const content = `# Research results: ${activeQuery}\n\n${filteredResults.map((item) => `## ${item.document.title}\n\n${item.whyUseful || ''}\n\n${generateAPACitation(item.document)}`).join('\n\n')}`;
+    downloadFile('data:text/markdown;charset=utf-8,' + encodeURIComponent(content), `discovery_${sanitizeFilename(activeQuery)}.md`);
+  }
+
+  function exportBibTeX() {
+    if (!filteredResults.length) return;
+    const content = filteredResults.map((item, index) => {
+      const doc = item.document;
+      const key = `${sanitizeFilename((doc.metadata?.authors || ['source'])[0])}${(doc.date || doc.metadata?.published || 'nd').slice(0, 4)}${index + 1}`;
+      return `@article{${key},\n  title = {${doc.title || ''}},\n  author = {${(doc.metadata?.authors || []).join(' and ')}},\n  year = {${(doc.date || doc.metadata?.published || '').slice(0, 4)}},\n  url = {${doc.canonicalUrl || ''}}\n}`;
+    }).join('\n\n');
+    downloadFile('data:text/plain;charset=utf-8,' + encodeURIComponent(content), `discovery_${sanitizeFilename(activeQuery)}.bib`);
+  }
+
   function copyRawJson() {
     if (!lastServerPayload) return;
     navigator.clipboard.writeText(JSON.stringify(lastServerPayload, null, 2)).then(() => {
@@ -975,7 +1023,7 @@
   function handleLibraryAction(action, item, button) {
     const library = getLibrary();
     const id = item.document.id;
-    const entry = { id, title: item.document.title, url: item.accessPath?.url || item.document.canonicalUrl || '', text: '' };
+    const entry = { id, title: item.document.title, abstract: item.document.abstract || '', query: activeQuery, url: item.accessPath?.url || item.document.canonicalUrl || '', text: '' };
     if (action === 'note') {
       const note = window.prompt('Add a note for this document:');
       if (!note || !note.trim()) return;
@@ -1024,12 +1072,31 @@
   function showLibraryView(view) {
     const names = { saved: 'Saved Collections', later: 'Read Later', read: 'Already Read', notes: 'Notes', downloads: 'Downloads' };
     const library = getLibrary();
-    const entries = (library[view] || []).map((entry) => typeof entry === 'string' ? { id: entry, title: entry } : entry);
     dom.libraryViewTitle.textContent = names[view] || 'Your Library';
-    dom.libraryViewList.innerHTML = entries.length ? entries.map((entry) => `<article class="library-entry"><h3>${escapeHTML(entry.title || entry.id)}</h3>${entry.text ? `<p>${escapeHTML(entry.text)}</p>` : ''}${entry.url ? `<a href="${escapeHTML(entry.url)}" target="_blank" rel="noopener noreferrer">Open source ↗</a>` : ''}</article>`).join('') : '<p class="library-empty">Nothing here yet. Save a document from your discovery results to start building this shelf.</p>';
+    dom.librarySearch.value = '';
+    dom.librarySearch.dataset.view = view;
+    renderLibraryEntries(view);
     dom.emptyState.classList.add('hidden');
     dom.resultsView.classList.add('hidden');
     dom.libraryView.classList.remove('hidden');
+  }
+
+  function renderLibraryEntries(view) {
+    const library = getLibrary();
+    const query = (dom.librarySearch.value || '').toLowerCase();
+    const entries = (library[view] || []).map((entry) => typeof entry === 'string' ? { id: entry, title: entry } : entry)
+      .filter((entry) => window.ResearchDeskFeatures.libraryMatches(entry, query));
+    dom.libraryViewList.innerHTML = entries.length ? entries.map((entry) => `<article class="library-entry"><h3>${escapeHTML(entry.title || entry.id)}</h3>${entry.text ? `<p>${escapeHTML(entry.text)}</p>` : ''}${entry.url ? `<a href="${escapeHTML(entry.url)}" target="_blank" rel="noopener noreferrer">Open source ↗</a>` : ''}</article>`).join('') : '<p class="library-empty">Nothing here yet. Save a document from your discovery results to start building this shelf.</p>';
+  }
+
+  function renderRefinementChips(plan, results) {
+    const terms = window.ResearchDeskFeatures.refinementTerms(plan, results);
+    dom.refinementChips.innerHTML = terms.map((term) => `<button type="button" class="refinement-chip" data-term="${escapeHTML(term)}">${escapeHTML(term)}</button>`).join('');
+    dom.refinementStrip.classList.toggle('hidden', terms.length === 0);
+    dom.refinementChips.querySelectorAll('.refinement-chip').forEach((chip) => chip.addEventListener('click', () => {
+      dom.input.value = `${activeQuery} ${chip.dataset.term}`;
+      dom.form.dispatchEvent(new Event('submit', { cancelable: true }));
+    }));
   }
 
   function hideLibraryView() {
@@ -1075,7 +1142,7 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'inquiry-item';
-      button.innerHTML = `<b>${String(index + 1).padStart(2, '0')}</b><span>${escapeHTML(query)}</span><small>Recent</small>`;
+      button.innerHTML = `<b>${String(index + 1).padStart(2, '0')}</b><span>${escapeHTML(query)}</span>`;
       button.addEventListener('click', () => {
         dom.input.value = query;
         dom.clearBtn.classList.remove('hidden');

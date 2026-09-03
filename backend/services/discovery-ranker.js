@@ -166,7 +166,7 @@ function rankForDiscovery(evaluatedDocs, searchPlan, targetLimit = 20) {
         provider: uniqueVia[0],
       },
       discoveredVia: uniqueVia,
-      calibration: { probability: item.calibratedProbability, model: getCalibrationModel().trained ? 'review-calibrated' : 'deterministic-fallback' },
+      calibration: { probability: item.calibratedProbability, model: getCalibrationModel().promoted ? 'review-calibrated' : 'deterministic-fallback' },
     };
   });
 }

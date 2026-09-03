@@ -42,7 +42,7 @@ npm test
 
 The current golden set covers 15 searches across software, books, clinical research, economics, education, law, classics, geoscience, biology, AI, psychology, and datasets. It includes 30 positive checks and 17 deliberate hard negatives. The application still supports deterministic operation without API keys; OpenRouter embeddings and AI evaluation are optional enhancements.
 
-## Remaining Advanced Work
+## Recently Shipped
 
 Historical citation timelines and bounded citation-context analysis now use free OpenAlex metadata. Citation context is sampled from at most 8 citing-work requests per search, and search results are persisted locally for 6 hours with a 500-entry / 10 MB cache limit. The cache uses the system temporary directory in Netlify/serverless environments and falls back to memory if disk writes are unavailable.
 
@@ -54,4 +54,10 @@ Provider requests now use one bounded retry, per-host spacing, short timeouts, a
 
 The default path remains free: OpenAlex, Crossref, Europe PMC, LOC, NARA, GitHub, Zenodo, PubMed, and other public endpoints are used within bounded request limits. Embeddings remain optional; no embedding or AI key is required for search, testing, citation timelines, or citation context analysis.
 
-An optional local review interface now records Relevant / Not relevant judgments on result cards. After 20 or more labeled examples containing both classes, a bounded logistic calibration model adjusts ranking; before that threshold, the deterministic no-key ranker remains active. Reviews are stored locally and are never sent to a paid service.
+An optional local review interface now records Relevant / Not relevant judgments on result cards. After 50 or more labeled examples containing both classes, a bounded logistic calibration model is evaluated in shadow mode and only promoted when its holdout accuracy meets or beats the deterministic baseline; otherwise the deterministic no-key ranker remains active. Reviews are stored locally and are never sent to a paid service.
+
+The library workflow now includes local shelf search, while discovery results support BibTeX, Markdown, and JSONL export in addition to CSV and JSON. Related-term refinement chips are generated from planner expansion and enriched result vocabulary and can immediately launch a refined search. Individual result cards also provide copy-citation actions, and empty-result messages include retrieval and rejection diagnostics when available.
+
+## Open Items
+
+Dedicated APIs for every institutional source, historical citation snapshots beyond the timeline data exposed by OpenAlex, and a trained cross-encoder or calibrated ranking model remain outside the default path. Calibration now has a local logistic implementation, but it remains shadow-only until its validation beats the deterministic baseline. These items should continue to be evaluated against a larger labeled query-document set.

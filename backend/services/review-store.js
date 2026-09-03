@@ -20,7 +20,7 @@ function writeReviews(reviews) {
   } catch { return false; }
 }
 function addReview(review) {
-  const normalized = { ...review, relevance: Number(review.relevance), goalFit: Number(review.goalFit), evidenceQuality: Number(review.evidenceQuality), semanticScore: Number(review.semanticScore), coherence: Number(review.coherence), createdAt: new Date().toISOString() };
+  const normalized = { ...review, title: String(review.title || '').slice(0, 500), abstract: String(review.abstract || '').slice(0, 2000), relevance: Number(review.relevance), goalFit: Number(review.goalFit), evidenceQuality: Number(review.evidenceQuality), semanticScore: Number(review.semanticScore), coherence: Number(review.coherence), createdAt: new Date().toISOString() };
   if (!normalized.query || !normalized.documentId || !['relevant', 'not-relevant'].includes(normalized.label) || FEATURE_KEYS.some((key) => !Number.isFinite(normalized[key]))) return false;
   return writeReviews([...readReviews(), normalized]);
 }
