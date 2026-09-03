@@ -481,10 +481,11 @@ async function scrapeCompanyResearch(companyKey) {
  */
 async function searchCompanyResearch(query, concepts = []) {
   const companies = Object.keys(CURATED_COMPANY_CATALOGS);
+  const stopWords = new Set(['a', 'an', 'the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'want', 'build', 'find', 'how', 'what', 'where', 'does', 'are', 'to', 'of', 'in', 'on', 'is']);
   const terms = [
-    ...query.toLowerCase().split(/\s+/).filter((w) => w.length > 2),
-    ...concepts.map((c) => c.toLowerCase()),
-  ];
+    ...query.toLowerCase().split(/\s+/).map((w) => w.replace(/[^a-z0-9-]/g, '')).filter((w) => w.length > 2 && !stopWords.has(w)),
+    ...concepts.map((c) => c.toLowerCase().trim()).filter((c) => c.length > 2 && !stopWords.has(c)),
+  ].filter((term, index, all) => all.indexOf(term) === index);
 
   const results = await Promise.all(
     companies.map((c) => scrapeCompanyResearch(c).catch(() => CURATED_COMPANY_CATALOGS[c] || []))
@@ -506,14 +507,12 @@ async function searchCompanyResearch(query, concepts = []) {
     return { doc, score };
   });
 
-  // If specific matches found, return top matches; otherwise return curated items with baseline score
+  // Curated catalogs are opt-in: never pad an unrelated search with arbitrary papers.
   const matched = scored.filter((s) => s.score > 0).sort((a, b) => b.score - a.score);
   if (matched.length > 0) {
     return matched.slice(0, 15).map((m) => m.doc);
   }
-
-  // Return a representative sample of leading industry papers
-  return allDocuments.slice(0, 6);
+  return [];
 }
 
 module.exports = {

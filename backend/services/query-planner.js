@@ -100,6 +100,10 @@ function buildDeterministicPlan(userQuery) {
     ],
     documentTypes: ['research_paper', 'technical_report', 'dataset', 'github_repository', 'book'],
     sources: ['openalex', 'crossref', 'company-scrapers'],
+    sourceRecommendations: {
+      openalex: true, crossref: true, company: true, patents: true,
+      grants: true, datasets: true, code: true, policy: false, clinicalTrials: false,
+    },
     subqueries,
     expectedRoles: ['foundational', 'applied', 'implementation', 'dataset', 'alternative'],
     reasoning: `Your query indicates a ${intentType} goal. We are searching across academic literature, Crossref, and leading research institutions for methodologies, empirical benchmarks, and working implementations.`,
@@ -144,7 +148,14 @@ async function planSearch(userQuery) {
         evidenceNeeds: Array.isArray(parsed.evidenceNeeds) ? parsed.evidenceNeeds : [],
         documentTypes: Array.isArray(parsed.documentTypes) ? parsed.documentTypes : ['research_paper'],
         sources: Array.isArray(parsed.sources) ? parsed.sources : ['openalex', 'crossref', 'company-scrapers'],
-        subqueries: parsed.subqueries.length ? parsed.subqueries : [{ query: trimmed, sources: ['openalex'] }],
+        sourceRecommendations: parsed.sourceRecommendations || {
+          openalex: true, crossref: true, company: true, patents: true,
+          grants: true, datasets: true, code: true, policy: false, clinicalTrials: false,
+        },
+        subqueries: parsed.subqueries.slice(0, 3).map((subquery) => ({
+          query: subquery.query || trimmed,
+          sources: Array.isArray(subquery.sources) && subquery.sources.length ? subquery.sources : ['openalex'],
+        })),
         expectedRoles: Array.isArray(parsed.expectedRoles)
           ? parsed.expectedRoles
           : ['foundational', 'applied', 'implementation', 'dataset'],

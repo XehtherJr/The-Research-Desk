@@ -4,6 +4,8 @@
  */
 
 const OPENALEX_API_URL = 'https://api.openalex.org/works';
+const persistentCache = require('../utils/persistent-cache');
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 /**
  * Reconstructs a full abstract from OpenAlex's abstract_inverted_index.
@@ -71,6 +73,9 @@ function mapDocumentType(rawType) {
  */
 async function searchWorks(query, limit = 25) {
   const fetchLimit = Math.max(10, Math.min(100, parseInt(limit, 10) || 25));
+  const cacheKey = `${query.trim().toLowerCase()}::${fetchLimit}`;
+  const cached = persistentCache.get('openalex-search', cacheKey, CACHE_TTL_MS);
+  if (cached) return cached;
 
   const params = new URLSearchParams({
     search: query.trim(),
@@ -94,10 +99,12 @@ async function searchWorks(query, limit = 25) {
 
   const data = await response.json();
 
-  return {
+  const result = {
     total: data.meta?.count || 0,
     results: data.results || [],
   };
+  persistentCache.set('openalex-search', cacheKey, result);
+  return result;
 }
 
 module.exports = {

@@ -1,4 +1,4 @@
-# Document Discovery Engine — V1 Refactor
+# The Research Desk — V2 Architecture
 
 An AI-native, goal-oriented document discovery engine. Rather than simply matching keywords, the system understands your research intent, plans a multi-provider search strategy, queries academic indexes and company research scrapers, evaluates evidence, and organizes results by research role.
 
@@ -8,6 +8,18 @@ An AI-native, goal-oriented document discovery engine. Rather than simply matchi
 
 ---
 
+## The V2 Discovery Loop
+
+The search pipeline now separates three concerns: broad retrieval, soft domain coherence, and goal-relative usefulness. Query analysis creates an intent-driven search policy with retrieval lanes, but domains remain open: coherence lowers or raises ranking confidence rather than rejecting unexpected disciplines.
+
+```
+Query → QueryAnalysis → SearchPolicy/Lanes → Multi-provider Retrieval →
+Deduplication → Data Enrichment → Domain Coherence → Evidence Extraction →
+Citation Context → Goal Evaluation → Intent-aware Discovery Ranking
+```
+
+V2 adds cached deterministic services for query analysis, search policy generation, domain coherence, evidence extraction, methods/dataset/reproducibility signals, and citation momentum. It also queries Zenodo, GitHub, NIH Reporter, and PubMed when appropriate, while preserving graceful degradation for unavailable providers.
+
 ## The V1 Discovery Loop
 
 ```
@@ -15,7 +27,7 @@ User Goal → Search Plan → Multi-Provider Retrieval → Deduplication → Evi
 ```
 
 1. **Query Planner**: Infers intent (`building`, `learning`, `understanding`, `researching`), goal, concepts, evidence needs, and subqueries.
-2. **Multi-Provider Retrieval**: Queries **OpenAlex**, **Crossref**, and **9 Institutional Scrapers** (Anthropic, OpenAI, DeepMind, Meta AI, Microsoft Research, Apple ML, NVIDIA, NASA, Genentech) with 24-hour caching.
+2. **Multi-Provider Retrieval**: Queries **OpenAlex**, **Crossref**, and **over 20 Institutional Scrapers** (Anthropic, OpenAI, DeepMind, Meta AI, Microsoft Research, Apple ML, NVIDIA, NASA, Genentech) with 24-hour caching.
 3. **Deduplication & Provenance Aggregation**: Merges duplicates by DOI, canonical URL, and Sørensen–Dice title similarity ($\ge 0.85$), aggregating multi-source provenance.
 4. **Document Understanding & Evaluation**: Evaluates documents relative to the user's goal, extracting concrete evidence items, contributions, and "Why Useful" explanations.
 5. **Goal-Relative Discovery Ranker**: Optimizes for goal-fit, relevance, and evidence quality ($0.5 \cdot \text{goalFit} + 0.3 \cdot \text{relevance} + 0.2 \cdot \text{quality} - \text{redundancyPenalty}$) while applying diversity constraints across roles and authors.
@@ -134,4 +146,4 @@ npm run dev
 
 ## License
 
-MIT
+This project is released under the MIT License. See [LICENSE.md](LICENSE.md) for the complete license text.

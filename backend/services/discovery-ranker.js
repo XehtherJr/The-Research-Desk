@@ -11,6 +11,7 @@
 const WEIGHT_GOAL_FIT = 0.5;
 const WEIGHT_RELEVANCE = 0.3;
 const WEIGHT_QUALITY = 0.2;
+const { calibrateFeatures, getCalibrationModel } = require('./calibrated-reranker');
 
 /**
  * Extracts first author surname for redundancy checking.
@@ -24,11 +25,22 @@ function getFirstAuthorKey(doc) {
   return first[first.length - 1].toLowerCase();
 }
 
+function getRoleOrder(intentType) {
+  const orders = {
+    learning: ['foundational', 'applied', 'implementation', 'dataset', 'alternative'],
+    building: ['implementation', 'applied', 'dataset', 'foundational', 'alternative'],
+    understanding: ['foundational', 'applied', 'alternative', 'implementation', 'dataset'],
+    evaluation: ['applied', 'foundational', 'implementation', 'alternative', 'dataset'],
+    researching: ['foundational', 'alternative', 'applied', 'implementation', 'dataset'],
+  };
+  return orders[intentType] || orders.researching;
+}
+
 /**
  * Ranks evaluated documents using goal-fit, relevance, quality, and diversity constraints.
  * @param {Array<{document: Object, evaluation: Object}>} evaluatedDocs
  * @param {Object} searchPlan
- * @param {number} targetLimit (default 20, clamp 15 to 25)
+ * @param {number} targetLimit (default 20, clamp 5 to 30)
  * @returns {Array<Object>} DiscoveryResult[]
  */
 function rankForDiscovery(evaluatedDocs, searchPlan, targetLimit = 20) {
@@ -36,28 +48,33 @@ function rankForDiscovery(evaluatedDocs, searchPlan, targetLimit = 20) {
     return [];
   }
 
-  const limit = Math.max(15, Math.min(25, targetLimit || 20));
+  const limit = Math.max(5, Math.min(30, targetLimit || 20));
 
   // Compute Base Scores
   const scored = evaluatedDocs.map(({ document, evaluation }) => {
     const goalFit = evaluation.goalFit || 50;
     const relevance = evaluation.relevance || 50;
     const quality = evaluation.evidenceQuality || 50;
+    const coherence = evaluation.domainValidity || document.domainCoherence?.score * 100 || 50;
 
     const baseScore =
       WEIGHT_GOAL_FIT * goalFit +
       WEIGHT_RELEVANCE * relevance +
-      WEIGHT_QUALITY * quality;
+      WEIGHT_QUALITY * quality + coherence * 0.1;
+    const convergenceBonus = Math.min(8, Math.max(0, (document.subqueryIndexes?.length || 0) - 1) * 4);
 
     const primaryRole = (evaluation.roles && evaluation.roles[0]) || 'applied';
+    const topicalGate = evaluation.relevance > 0 && (evaluation.topicalMatch?.passes !== false);
+    const calibratedProbability = calibrateFeatures({ relevance, goalFit, evidenceQuality: quality, semanticScore: evaluation.semanticScore || relevance, coherence });
 
     return {
       document,
       evaluation,
-      baseScore,
+      baseScore: topicalGate ? (calibratedProbability === null ? baseScore : calibratedProbability * 100) + convergenceBonus : -Infinity,
       finalScore: baseScore,
       role: primaryRole,
       authorKey: getFirstAuthorKey(document),
+      calibratedProbability,
     };
   });
 
@@ -70,11 +87,12 @@ function rankForDiscovery(evaluatedDocs, searchPlan, targetLimit = 20) {
   const roleCounts = new Map();
   const authorCounts = new Map();
 
-  // 1. Guaranteed Role Seed Pass: Ensure at least one top item from each expected role
-  const expectedRoles = searchPlan.expectedRoles || ['foundational', 'applied', 'implementation', 'dataset'];
+  // Seed role diversity only after relevance and coherence have been established.
+  const expectedRoles = getRoleOrder(searchPlan.intent?.type);
 
   for (const role of expectedRoles) {
-    const idx = remaining.findIndex((item) => item.role === role);
+    if (selected.length >= limit) break;
+    const idx = remaining.findIndex((item) => item.role === role && item.evaluation.relevance >= 45 && (item.document.domainCoherence?.score || 0) >= 0.4);
     if (idx !== -1) {
       const item = remaining.splice(idx, 1)[0];
       selected.push(item);
@@ -121,7 +139,12 @@ function rankForDiscovery(evaluatedDocs, searchPlan, targetLimit = 20) {
       if (p.provider === 'company' && p.source) {
         return `Company: ${p.source.toUpperCase()}`;
       }
-      return p.provider === 'crossref' ? 'Crossref' : 'OpenAlex';
+      if (p.provider === 'crossref') return 'Crossref';
+      if (p.provider === 'dataset') return `Dataset: ${(p.source || 'source').toUpperCase()}`;
+      if (p.provider === 'code') return `Code: ${(p.source || 'source').toUpperCase()}`;
+      if (p.provider === 'patent') return `Patent: ${(p.source || 'source').toUpperCase()}`;
+      if (p.provider === 'grant') return `Grant: ${(p.source || 'source').toUpperCase()}`;
+      return 'OpenAlex';
     });
 
     const uniqueVia = Array.from(new Set(discoveredVia));
@@ -143,6 +166,7 @@ function rankForDiscovery(evaluatedDocs, searchPlan, targetLimit = 20) {
         provider: uniqueVia[0],
       },
       discoveredVia: uniqueVia,
+      calibration: { probability: item.calibratedProbability, model: getCalibrationModel().trained ? 'review-calibrated' : 'deterministic-fallback' },
     };
   });
 }

@@ -1,0 +1,17 @@
+[
+  { "query": "JARVIS codebase", "mustMatch": ["JARVIS", "jarvis"], "mustNotMatch": ["MicroscopyGPT", "Covasim"] },
+  { "query": "how to speed read books", "mustMatch": ["speed reading", "reading rate"], "mustNotMatch": ["Structural Equation Modeling", "Sentiment Analysis"] },
+  { "query": "diagnose bipolar disorder", "mustMatch": ["bipolar disorder", "mania"], "mustNotMatch": ["atomic structure"] },
+  { "query": "labor market wages", "mustMatch": ["labor market", "wages"], "mustNotMatch": ["protein structure"] },
+  { "query": "climate change adaptation", "mustMatch": ["climate adaptation", "climate change"], "mustNotMatch": ["bipolar disorder"] },
+  { "query": "free books online", "mustMatch": ["free books", "Library of Congress books"], "mustNotMatch": ["neural network benchmark"] },
+  { "query": "education reading comprehension", "mustMatch": ["reading comprehension", "education research"], "mustNotMatch": ["atomic structure"] },
+  { "query": "court legal decisions", "mustMatch": ["court decisions", "legal case"], "mustNotMatch": ["protein structure"] },
+  { "query": "ancient Greek texts", "mustMatch": ["ancient Greek", "Greek texts"], "mustNotMatch": ["machine learning"] },
+  { "query": "earthquake geophysics", "mustMatch": ["earthquake geophysics", "geophysical earthquake"], "mustNotMatch": ["bipolar disorder"] },
+  { "query": "protein structure prediction", "mustMatch": ["protein structure", "structure prediction"], "mustNotMatch": ["labor market wages"] },
+  { "query": "reinforcement learning human feedback", "mustMatch": ["reinforcement learning from human feedback", "RLHF"], "mustNotMatch": ["ancient Greek texts"] },
+  { "query": "psychology cognitive behavior", "mustMatch": ["cognitive psychology", "behavioral psychology"], "mustNotMatch": ["climate adaptation"] },
+  { "query": "dataset machine learning benchmark", "mustMatch": ["machine learning benchmark", "dataset benchmark"], "mustNotMatch": ["court decisions"] },
+  { "query": "software repository documentation", "mustMatch": ["software repository", "repository documentation"], "mustNotMatch": ["ancient Greek texts"] }
+]

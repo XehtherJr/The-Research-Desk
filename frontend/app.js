@@ -32,6 +32,7 @@
     viewAllInquiries: $('#view-all-inquiries'),
     librarySavedCount: $('#library-saved-count'),
     libraryLaterCount: $('#library-later-count'),
+    libraryReadCount: $('#library-read-count'),
     libraryNotesCount: $('#library-notes-count'),
     libraryDownloadsCount: $('#library-downloads-count'),
     libraryView: $('#library-view'),
@@ -62,6 +63,7 @@
     planJsonToggle: $('#plan-json-toggle'),
     planJsonView: $('#plan-json-view'),
     planJsonCode: $('#plan-json-code'),
+    planPolicySummary: $('#plan-policy-summary'),
 
     // Results Header & Actions
     resultsCount: $('#results-count'),
@@ -124,6 +126,7 @@
   let filteredResults = [];      // Filtered view
   let lastServerPayload = null;  // Complete response
   let activeSearchPlan = null;   // Active SearchPlan
+  let activeRoleOrder = ['foundational', 'applied', 'implementation', 'dataset', 'alternative'];
   let activeRoleTab = 'all';     // Active role tab filter
   let currentSort = 'discovery'; // Sorting key
   let activeQuery = '';
@@ -278,12 +281,17 @@
       const data = await response.json();
       lastServerPayload = data;
       activeSearchPlan = data.searchPlan || null;
+      activeRoleOrder = Array.isArray(activeSearchPlan?.roleOrder) && activeSearchPlan.roleOrder.length
+        ? activeSearchPlan.roleOrder
+        : ['foundational', 'applied', 'implementation', 'dataset', 'alternative'];
+      syncRoleTabs();
       fullDiscoveryResults = data.results || [];
 
       completeProgressBar();
 
       if (fullDiscoveryResults.length === 0) {
-        showError('No Documents Discovered', 'No documents matched your goal across OpenAlex, Crossref, and company research scrapers. Try broadening your terms.');
+        const suggestions = data.metadata?.suggestions || ['Try broadening your terms.'];
+        showError('No High-Confidence Documents', suggestions.join(' '));
         return;
       }
 
@@ -367,6 +375,12 @@
     }
 
     dom.planReasoning.textContent = plan.reasoning || '';
+    const analysis = plan.queryAnalysis;
+    const policy = plan.searchPolicy;
+    if (analysis && policy) {
+      const laneNames = policy.lanes.map((lane) => lane.name).join(' • ');
+      dom.planPolicySummary.innerHTML = `<span>Domain: <strong>${escapeHTML(analysis.domain.primary)}</strong></span><span>Intent: <strong>${escapeHTML(analysis.intent.type)}</strong></span><span>Lanes: <strong>${escapeHTML(laneNames)}</strong></span>`;
+    }
     dom.planJsonCode.textContent = JSON.stringify(plan, null, 2);
   }
 
@@ -406,7 +420,7 @@
 
     const isFiltered =
       activeRoleTab !== 'all' ||
-      selectedTypes.size < 5 ||
+      selectedTypes.size < 7 ||
       fromYear !== null ||
       toYear !== null ||
       openAccessOnly;
@@ -463,6 +477,18 @@
     dom.tabCountAlternative.textContent = counts.alternative;
   }
 
+  function syncRoleTabs() {
+    const tabContainer = dom.roleTabs[0]?.parentElement;
+    if (!tabContainer) return;
+    const allTab = dom.roleTabs.find((tab) => tab.dataset.role === 'all');
+    const tabsByRole = new Map(dom.roleTabs.map((tab) => [tab.dataset.role, tab]));
+    if (allTab) tabContainer.appendChild(allTab);
+    activeRoleOrder.forEach((role) => {
+      const tab = tabsByRole.get(role);
+      if (tab) tabContainer.appendChild(tab);
+    });
+  }
+
   function resetFilters() {
     resetFiltersSilently();
     applyFiltersAndSort();
@@ -491,7 +517,7 @@
 
     // If viewing "all", group by research role with section headers
     if (activeRoleTab === 'all') {
-      const roleOrder = ['foundational', 'applied', 'implementation', 'dataset', 'alternative'];
+      const roleOrder = activeRoleOrder;
       const grouped = {};
       roleOrder.forEach((r) => { grouped[r] = []; });
 
@@ -586,6 +612,9 @@
         <p class="why-useful-text">${escapeHTML(item.whyUseful || evalData.explanation || 'Key research publication.')}</p>
       </div>
 
+      ${renderEnrichmentSummary(doc)}
+      ${doc.domainCoherence ? `<div class="coherence-line"><b>Domain coherence</b><span>${Math.round(doc.domainCoherence.score * 100)}% • ${escapeHTML(doc.domainCoherence.contextIsRelevant ? 'directly relevant' : 'adjacent evidence')}</span></div>` : ''}
+
       <!-- Badges Row: Evidence & Provenance -->
       <div class="card-badges-row">
         ${evidenceBadges}
@@ -611,14 +640,12 @@
         </div>
 
         <div class="card-actions">
+          <button type="button" class="card-action-btn review-btn" data-review-label="relevant">Relevant</button>
+          <button type="button" class="card-action-btn review-btn" data-review-label="not-relevant">Not relevant</button>
           <button type="button" class="card-action-btn library-action-btn" data-library-action="saved">Save</button>
           <button type="button" class="card-action-btn library-action-btn" data-library-action="later">Read Later</button>
           <button type="button" class="card-action-btn library-action-btn" data-library-action="read">Mark Read</button>
-          <button type="button" class="card-action-btn library-action-btn" data-library-action="note">Note</button>
           <button type="button" class="card-action-btn library-action-btn" data-library-action="download">Download</button>
-          <button type="button" class="card-action-btn view-details-btn">
-            Document Details
-          </button>
           <a href="${escapeHTML(item.accessPath?.url || doc.canonicalUrl || '#')}" target="_blank" rel="noopener noreferrer" class="card-action-link">
             Direct Source ↗
           </a>
@@ -637,17 +664,46 @@
       });
     }
 
-    // View Details Modal
-    const detailsBtn = card.querySelector('.view-details-btn');
-    if (detailsBtn) {
-      detailsBtn.addEventListener('click', () => openModal(item));
-    }
+    // The card is the details affordance; controls and links keep their own behavior.
+    card.addEventListener('click', (event) => {
+      if (!event.target.closest('button, a, input, select, textarea')) openModal(item);
+    });
 
     card.querySelectorAll('.library-action-btn').forEach((button) => {
       button.addEventListener('click', () => handleLibraryAction(button.dataset.libraryAction, item, button));
     });
+    card.querySelectorAll('.review-btn').forEach((button) => {
+      button.addEventListener('click', () => submitReview(item, button.dataset.reviewLabel, button));
+    });
 
     return card;
+  }
+
+  async function submitReview(item, label, button) {
+    const evaluation = item.evaluation || {};
+    try {
+      const response = await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: activeQuery,
+          documentId: item.document.id,
+          label,
+          useful: label === 'relevant',
+          relevance: evaluation.relevance || 0,
+          goalFit: evaluation.goalFit || 0,
+          evidenceQuality: evaluation.evidenceQuality || 0,
+          semanticScore: evaluation.semanticScore || item.document.semanticSimilarity || 0,
+          coherence: evaluation.domainValidity || Math.round((item.document.domainCoherence?.score || 0) * 100),
+        }),
+      });
+      if (!response.ok) throw new Error('Review could not be saved');
+      button.parentElement.querySelectorAll('.review-btn').forEach((candidate) => candidate.classList.remove('selected'));
+      button.classList.add('selected');
+      button.textContent = 'Recorded';
+    } catch (error) {
+      button.textContent = 'Retry review';
+    }
   }
 
   // ═══════════ DETAIL MODAL ═══════════
@@ -699,6 +755,7 @@
     // Modal Footer Actions
     const primaryUrl = item.accessPath?.url || doc.canonicalUrl || '#';
     const pdfUrl = doc.access?.pdfUrl || doc.metadata?.openAccessPdf || null;
+    const downloadUrl = pdfUrl ? `/api/download?url=${encodeURIComponent(pdfUrl)}&filename=${encodeURIComponent(`${sanitizeFilename(doc.title)}.pdf`)}` : null;
     dom.modalPreviewSection.classList.toggle('hidden', !pdfUrl);
     if (pdfUrl) dom.documentPreview.src = pdfUrl;
 
@@ -708,7 +765,7 @@
       </a>
       ${pdfUrl ? `
         <button type="button" class="modal-action-btn" id="modal-preview-btn">Preview here</button>
-        <a href="${escapeHTML(pdfUrl)}" download target="_blank" rel="noopener noreferrer" class="modal-action-btn">Download file</a>
+        <a href="${escapeHTML(downloadUrl)}" download class="modal-action-btn">Download file</a>
       ` : ''}
       <button type="button" class="modal-action-btn-secondary" id="modal-copy-cite-btn">
         Copy Citation (APA)
@@ -900,9 +957,9 @@
 
   function getLibrary() {
     try {
-      return JSON.parse(localStorage.getItem(STORAGE_LIBRARY_KEY) || '{"saved":[],"later":[],"notes":[],"downloads":[]}');
+      return { read: [], ...JSON.parse(localStorage.getItem(STORAGE_LIBRARY_KEY) || '{"saved":[],"later":[],"notes":[],"downloads":[]}') };
     } catch (e) {
-      return { saved: [], later: [], notes: [], downloads: [] };
+      return { saved: [], later: [], read: [], notes: [], downloads: [] };
     }
   }
 
@@ -910,6 +967,7 @@
     const library = getLibrary();
     dom.librarySavedCount.textContent = library.saved.length;
     dom.libraryLaterCount.textContent = library.later.length;
+    dom.libraryReadCount.textContent = (library.read || []).length;
     dom.libraryNotesCount.textContent = library.notes.length;
     dom.libraryDownloadsCount.textContent = library.downloads.length;
   }
@@ -952,21 +1010,19 @@
   }
 
   async function downloadSourceFile(url, title) {
-    try {
-      const response = await fetch(url, { mode: 'cors' });
-      if (!response.ok) throw new Error('Source download unavailable');
-      const blobUrl = URL.createObjectURL(await response.blob());
-      downloadFile(blobUrl, `${sanitizeFilename(title)}.pdf`);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-    } catch (error) {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    }
+    const proxyUrl = `/api/download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(`${sanitizeFilename(title)}.pdf`)}`;
+    const link = document.createElement('a');
+    link.href = proxyUrl;
+    link.download = `${sanitizeFilename(title)}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   }
 
   function entryId(entry) { return typeof entry === 'string' ? entry : entry.id; }
 
   function showLibraryView(view) {
-    const names = { saved: 'Saved Collections', later: 'Read Later', notes: 'Notes', downloads: 'Downloads' };
+    const names = { saved: 'Saved Collections', later: 'Read Later', read: 'Already Read', notes: 'Notes', downloads: 'Downloads' };
     const library = getLibrary();
     const entries = (library[view] || []).map((entry) => typeof entry === 'string' ? { id: entry, title: entry } : entry);
     dom.libraryViewTitle.textContent = names[view] || 'Your Library';
@@ -985,6 +1041,25 @@
   function markdownToHTML(markdown) {
     const escaped = escapeHTML(markdown || '');
     return escaped.replace(/^### (.*)$/gm, '<h5>$1</h5>').replace(/^## (.*)$/gm, '<h4>$1</h4>').replace(/^# (.*)$/gm, '<h3>$1</h3>').replace(/^[-*] (.*)$/gm, '<li>$1</li>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>').split(/\n\n+/).map((block) => block.startsWith('<h') || block.startsWith('<li>') ? block : `<p>${block.replace(/\n/g, '<br>')}</p>`).join('').replace(/(<li>.*?<\/li>)+/gs, '<ul>$&</ul>');
+  }
+
+  function renderEnrichmentSummary(doc) {
+    const enriched = doc.enrichedMetadata;
+    const citation = doc.citationContext;
+    if (!enriched && !citation) return '';
+    const methods = (enriched?.methods || []).slice(0, 4).map((method) => `<span class="enrichment-chip">${escapeHTML(method.name)}</span>`).join('');
+    const datasets = (enriched?.datasets || []).slice(0, 4).map((dataset) => escapeHTML(dataset.name)).join(' • ');
+    const repro = enriched?.reproducibility;
+    const momentum = citation?.momentum;
+    const context = citation?.contextAnalysis;
+    const contextSummary = context?.counts ? Object.entries(context.counts).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([label, count]) => `${count} ${label}`).join(' • ') : '';
+    return `<div class="enrichment-summary">
+      ${methods ? `<div><b>Methods</b><span class="enrichment-chips">${methods}</span></div>` : ''}
+      ${datasets ? `<div><b>Datasets</b><span>${datasets}</span></div>` : ''}
+      ${repro ? `<div><b>Reproducibility</b><span class="repro-${repro.score}">${repro.score.toUpperCase()}${repro.codeAvailable ? ' • Code' : ''}${repro.dataAvailable ? ' • Data' : ''}</span></div>` : ''}
+      ${momentum ? `<div><b>Citation momentum</b><span>${momentum.citesPerYear}/yr • ${momentum.trend}</span></div>` : ''}
+      ${contextSummary ? `<div><b>Citation context</b><span>${escapeHTML(contextSummary)}</span></div>` : ''}
+    </div>`;
   }
 
   function renderSidebarInquiries() {
@@ -1040,6 +1115,10 @@
       case 'report': return 'Technical Report';
       case 'dataset': return 'Dataset';
       case 'repository': return 'Code Repository';
+      case 'patent': return 'Patent';
+      case 'grant': return 'Grant';
+      case 'policy_document': return 'Policy Document';
+      case 'clinical_trial': return 'Clinical Trial';
       case 'paper':
       default: return 'Research Paper';
     }

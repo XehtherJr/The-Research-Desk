@@ -22,7 +22,7 @@
       <div class="desk-brand">
         <div class="desk-lamp" aria-hidden="true">◒</div>
         <div>
-          <span class="desk-brand-name">The Research Desk</span>
+          <a class="desk-brand-name" href="/" aria-label="Go to Research Desk home">The Research Desk</a>
           <span class="desk-brand-subtitle">Document Discovery Engine</span>
         </div>
       </div>
@@ -37,6 +37,7 @@
         <h2>Your Library</h2>
         <button type="button" class="library-item" data-library-view="saved"><span>▣</span> Saved Collections <b id="library-saved-count">0</b></button>
         <button type="button" class="library-item" data-library-view="later"><span>♧</span> Read Later <b id="library-later-count">0</b></button>
+        <button type="button" class="library-item" data-library-view="read"><span>✓</span> Already Read <b id="library-read-count">0</b></button>
         <button type="button" class="library-item" data-library-view="notes"><span>✎</span> Notes <b id="library-notes-count">0</b></button>
         <button type="button" class="library-item" data-library-view="downloads"><span>⇩</span> Downloads <b id="library-downloads-count">0</b></button>
       </div>
@@ -201,6 +202,8 @@
               </div>
             </div>
 
+            <div class="plan-policy-summary" id="plan-policy-summary"></div>
+
             <p class="plan-reasoning" id="plan-reasoning"></p>
 
             <div class="plan-footer-actions">
@@ -289,6 +292,8 @@
                   <input type="checkbox" name="type-filter" value="repository" checked>
                   <span class="filter-text">Code Repository</span>
                 </label>
+                <label class="filter-item"><input type="checkbox" name="type-filter" value="patent" checked><span class="filter-text">Patent</span></label>
+                <label class="filter-item"><input type="checkbox" name="type-filter" value="grant" checked><span class="filter-text">Grant</span></label>
               </div>
             </div>
 

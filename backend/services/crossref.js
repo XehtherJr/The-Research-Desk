@@ -4,6 +4,8 @@
  */
 
 const CROSSREF_API_URL = 'https://api.crossref.org/works';
+const persistentCache = require('../utils/persistent-cache');
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 /**
  * Strips XML/JATS formatting tags often present in Crossref abstracts.
@@ -119,6 +121,9 @@ function normalizeCrossrefWork(item) {
  */
 async function searchCrossref(query, limit = 15) {
   const fetchLimit = Math.max(5, Math.min(50, parseInt(limit, 10) || 15));
+  const cacheKey = `${query.trim().toLowerCase()}::${fetchLimit}`;
+  const cached = persistentCache.get('crossref-search', cacheKey, CACHE_TTL_MS);
+  if (cached) return cached;
   const params = new URLSearchParams({
     query: query.trim(),
     rows: String(fetchLimit),
@@ -146,7 +151,9 @@ async function searchCrossref(query, limit = 15) {
 
     const data = await response.json();
     const items = data.message?.items || [];
-    return items.map(normalizeCrossrefWork).filter(Boolean);
+    const documents = items.map(normalizeCrossrefWork).filter(Boolean);
+    persistentCache.set('crossref-search', cacheKey, documents);
+    return documents;
   } catch (err) {
     console.warn(`[Crossref] Fetch error: ${err.message}`);
     return [];
