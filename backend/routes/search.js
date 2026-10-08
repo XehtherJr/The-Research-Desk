@@ -23,7 +23,7 @@ const { searchCodeRepositories } = require('../services/providers/code-repositor
 const { searchPatents } = require('../services/providers/patents');
 const { searchGrants } = require('../services/providers/grants');
 const { analyzeQuery } = require('../services/query-analyzer');
-const { generateSearchPolicy } = require('../services/search-policy');
+const { generateSearchPolicy, detectInterdisciplinaryDomains, getProviderEligibility } = require('../services/search-policy');
 const { applyCoherence } = require('../services/domain-coherence');
 const { extractEvidenceBatch } = require('../services/evidence-extractor');
 const { searchPubMed } = require('../services/providers/pubmed');
@@ -41,6 +41,10 @@ function withTimeout(promise, timeoutMs, fallback) {
 
 function shouldSearchCompanyCatalog(query, analysis) {
   return analysis.domain.primary === 'computer-science' || /openai|anthropic|deepmind|meta ai|microsoft research|nvidia|jarvis|llm|software|codebase|repository/i.test(query);
+}
+
+function shouldSearchCodeCatalog(query, analysis) {
+  return analysis.intent.type === 'building' || /codebase|repository|repo|software|implementation|github|framework/i.test(query);
 }
 
 function annotateSubquery(documents, subqueryIndex) {
@@ -113,10 +117,13 @@ router.post('/', async (req, res) => {
     const analysisStart = Date.now();
     const queryAnalysis = await analyzeQuery(trimmedQuery);
     const searchPolicy = generateSearchPolicy(queryAnalysis);
+    queryAnalysis.detectedDomains = searchPolicy.detectedDomains;
+    searchPolicy.providerEligibility = getProviderEligibility(trimmedQuery, queryAnalysis);
     timing.query_analysis_ms = Date.now() - analysisStart;
     const planStart = Date.now();
     const searchPlan = await planSearch(trimmedQuery);
     searchPlan.queryAnalysis = queryAnalysis;
+    queryAnalysis.searchPolicy = searchPolicy;
     searchPlan.searchPolicy = searchPolicy;
     searchPlan.intent.type = queryAnalysis.intent.type;
     searchPlan.intent.goal = queryAnalysis.goal.statement;
@@ -142,10 +149,17 @@ router.post('/', async (req, res) => {
     const crossrefSubquery = subqueries.find((s) => s.sources.includes('crossref'))?.query || trimmedQuery;
     const crossrefSubqueryIndex = Math.max(0, subqueries.findIndex((s) => s.sources.includes('crossref')));
     const laneQuery = searchPolicy.lanes[0]?.queries[0]?.base || trimmedQuery;
+    const interdisciplinaryDomains = detectInterdisciplinaryDomains(trimmedQuery);
+    const interdisciplinaryQueries = interdisciplinaryDomains.length > 1
+      ? interdisciplinaryDomains.map((domain) => `${trimmedQuery} ${domain}`)
+      : [];
+    const providerEligibility = searchPolicy.providerEligibility;
+    if (!providerEligibility.patents) console.info(`[Retrieval] Skipping patents for "${trimmedQuery}" (${providerEligibility.reason}).`);
+    if (!providerEligibility.pubmed) console.info(`[Retrieval] Skipping PubMed for "${trimmedQuery}" (${providerEligibility.reason}).`);
 
-    // Parallel fetch across academic, company, dataset, code, patent, and grant sources.
+    // Patents and PubMed are restricted to biomedical searches; they add noise to AI/CS retrieval.
     const [openAlexResults, crossrefDocs, companyDocs, datasetDocs, codeDocs, patentDocs, grantDocs, pubmedDocs] = await Promise.all([
-      Promise.all(subqueries.map((subquery, index) => subquery.sources.includes('openalex') ? withTimeout(searchWorks(expandQuery(subquery.query, searchPlan.concepts), 12).catch((err) => {
+      Promise.all([...subqueries, ...interdisciplinaryQueries.map((query) => ({ query, sources: ['openalex'] }))].map((subquery, index) => subquery.sources.includes('openalex') ? withTimeout(searchWorks(expandQuery(subquery.query, searchPlan.concepts), 12).catch((err) => {
         console.warn('[Retrieval: OpenAlex] Warning:', err.message);
         return { results: [] };
       }), 4500, { results: [] }).then((result) => ({ ...result, subqueryIndex: index })) : null)).then((results) => results.filter(Boolean)),
@@ -158,10 +172,12 @@ router.post('/', async (req, res) => {
         return [];
       }), 3500, []),
       withTimeout(searchDatasets(trimmedQuery).catch(() => []), 3500, []),
-      withTimeout(searchCodeRepositories(trimmedQuery).catch(() => []), 3500, []),
-      withTimeout(searchPatents(trimmedQuery).catch(() => []), 3500, []),
+      withTimeout((shouldSearchCodeCatalog(trimmedQuery, queryAnalysis) ? searchCodeRepositories(trimmedQuery) : Promise.resolve([])).catch(() => []), 3500, []),
+      providerEligibility.patents ? withTimeout(searchPatents(trimmedQuery).catch(() => []), 3500, []) : Promise.resolve([]),
       withTimeout(searchGrants(trimmedQuery).catch(() => []), 3500, []),
-      queryAnalysis.domain.primary === 'clinical' ? withTimeout(searchPubMed(trimmedQuery).catch(() => []), 3500, []) : Promise.resolve([]),
+      providerEligibility.pubmed
+        ? withTimeout(Promise.all([trimmedQuery, ...interdisciplinaryQueries].map((query) => searchPubMed(query).catch(() => []))).then((groups) => groups.flat()), 3500, [])
+        : Promise.resolve([]),
     ]);
 
     const normalizedOpenAlex = openAlexResults.flatMap((result) => annotateSubquery(normalizeWorks(result.results || []), result.subqueryIndex));

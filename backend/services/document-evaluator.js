@@ -54,6 +54,10 @@ function evaluateDocumentDeterministically(doc, searchPlan) {
   const queryText = (searchPlan.query || '').toLowerCase();
   const speedReadingQuery = /speed\s+read|speed-reading|speedreading/.test(queryText);
   const implementationQuery = /codebase|repository|repo|implementation|software/.test(queryText);
+  const paperIntent = !implementationQuery && /method|algorithm|develop|research|paper|study|model|approach|technique|force field|simulation/.test(queryText);
+  const contentType = String(doc.type || '').toLowerCase();
+  const isSoftwareDocument = contentType === 'repository' || contentType === 'github' || contentType === 'docs' || contentType === 'documentation'
+    || String(doc.metadata?.venue || '').toLowerCase() === 'github';
 
   // 1. Calculate Concept Overlap Relevance (0 - 100)
   let conceptHits = 0;
@@ -76,6 +80,7 @@ function evaluateDocumentDeterministically(doc, searchPlan) {
     if (/jarvis/.test(queryText) && doc.title.toLowerCase().includes('jarvis')) relevance += 35;
     if (/jarvis/.test(queryText) && doc.type === 'repository' && !text.includes('jarvis')) relevance -= 25;
   }
+  if (paperIntent && isSoftwareDocument) relevance *= 0.3;
   relevance = Math.min(100, Math.max(0, relevance));
 
   // 2. Determine Role based on document type and content signals
@@ -145,10 +150,14 @@ function evaluateDocumentDeterministically(doc, searchPlan) {
     },
   ];
 
+  const paperConfidence = isSoftwareDocument ? 0.05 : (contentType === 'paper' || contentType === 'journal' || /arxiv/i.test(String(doc.metadata?.venue || doc.venue || '')) ? 0.95 : 0.65);
+
   return {
     documentId: doc.id,
     searchPlanId: searchPlan.query,
     relevance,
+    contentTypeConfidence: paperConfidence,
+    contentTypePenalty: paperIntent && isSoftwareDocument ? 0.3 : 1,
     goalFit: Math.min(100, goalFit + reproducibilityBonus),
     domainValidity: Math.round((doc.domainCoherence?.score || 0.5) * 100),
     reproducibilityBonus,
@@ -224,10 +233,15 @@ async function evaluateBatchWithAI(batchDocs, searchPlan) {
             extractedBy: 'ai',
           }));
 
+          const deterministic = evaluateDocumentDeterministically(doc, searchPlan);
+          const paperIntent = !/codebase|repository|repo|implementation|software/.test((searchPlan.query || '').toLowerCase())
+            && /method|algorithm|develop|research|paper|study|model|approach|technique|force field|simulation/.test((searchPlan.query || '').toLowerCase());
+          const isSoftwareDocument = ['repository', 'github', 'docs', 'documentation'].includes(String(doc.type || '').toLowerCase());
+          const contentTypePenalty = paperIntent && isSoftwareDocument ? 0.3 : 1;
           return {
             documentId: doc.id,
             searchPlanId: searchPlan.query,
-            relevance: Math.min(100, Math.max(0, found.relevance || 80)),
+            relevance: Math.min(100, Math.max(0, (found.relevance || 80) * contentTypePenalty)),
             goalFit: Math.min(100, Math.max(0, found.goalFit || 80)),
             domainValidity: Math.min(100, Math.max(0, found.domainValidity || Math.round((doc.domainCoherence?.score || 0.5) * 100))),
             reproducibilityBonus: Math.min(10, Math.max(0, found.reproducibilityBonus || 0)),
@@ -247,6 +261,8 @@ async function evaluateBatchWithAI(batchDocs, searchPlan) {
             explanation: found.whyUseful || 'Relevant paper supporting your research goal.',
             evidence: evidenceItems,
             confidence: found.confidence || 0.9,
+            contentTypeConfidence: deterministic.contentTypeConfidence,
+            contentTypePenalty,
             _evaluatedBy: 'ai',
           };
         }

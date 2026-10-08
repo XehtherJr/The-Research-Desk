@@ -84,6 +84,21 @@ npm run dev
 
 ## API
 
+### `POST /api/investigate`
+
+Resolve a DOI, arXiv identifier, or paper URL and return a deterministic investigation dossier.
+
+**Request:**
+```json
+{
+  "paper": {
+    "doi": "10.48550/arXiv.1706.03762"
+  }
+}
+```
+
+The response contains normalized paper metadata, extracted claims, related evidence, follow-up candidates, implementations, dependencies, and investigation status. The existing search endpoint remains available for broad discovery.
+
 ### `POST /api/search`
 
 **Request:**

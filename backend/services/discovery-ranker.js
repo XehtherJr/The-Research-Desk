@@ -36,6 +36,41 @@ function getRoleOrder(intentType) {
   return orders[intentType] || orders.researching;
 }
 
+function getPublicationYear(document) {
+  const value = document.date || document.publicationDate || document.metadata?.published || document.metadata?.publicationDate;
+  const year = Number.parseInt(String(value || '').slice(0, 4), 10);
+  return Number.isFinite(year) ? year : null;
+}
+
+function applyTemporalDiversity(selected, scored, limit) {
+  const currentYear = new Date().getFullYear();
+  const recent = scored.filter((item) => { const year = getPublicationYear(item.document); return year !== null && year >= currentYear - 2; });
+  if (!scored.length || recent.length / scored.length <= 0.75) return selected;
+
+  const selectedIds = new Set(selected.map((item) => item.document.id));
+  const older = scored.filter((item) => {
+    const year = getPublicationYear(item.document);
+    return year !== null && year <= currentYear - 5 && !selectedIds.has(item.document.id)
+      && item.evaluation.relevance >= 45 && (item.document.domainCoherence?.score || 0) >= 0.4;
+  }).sort((a, b) => b.baseScore - a.baseScore);
+  if (!older.length) return selected;
+
+  const needed = Math.min(2, older.length);
+
+  const result = [...selected];
+  for (let index = 0; index < needed; index++) {
+    const replacementIndex = result.slice(0, 10).findIndex((item) => {
+      const year = getPublicationYear(item.document);
+      return year !== null && year >= currentYear - 2;
+    });
+    if (replacementIndex === -1) break;
+    const replacement = older[index];
+    result[replacementIndex] = replacement;
+    console.info(`[TEMPORAL DIVERSITY] Inserted ${getPublicationYear(replacement.document)} document ${replacement.document.id}; recent ratio=${(recent.length / scored.length).toFixed(2)}`);
+  }
+  return result.slice(0, limit);
+}
+
 /**
  * Ranks evaluated documents using goal-fit, relevance, quality, and diversity constraints.
  * @param {Array<{document: Object, evaluation: Object}>} evaluatedDocs
@@ -130,7 +165,8 @@ function rankForDiscovery(evaluatedDocs, searchPlan, targetLimit = 20) {
   }
 
   // Format into final DiscoveryResult[]
-  return selected.map((item, idx) => {
+  const temporallyDiverse = applyTemporalDiversity(selected, scored.filter((item) => Number.isFinite(item.baseScore)), limit);
+  return temporallyDiverse.map((item, idx) => {
     const doc = item.document;
     const evaluation = item.evaluation;
 

@@ -658,6 +658,7 @@
         </div>
 
         <div class="card-actions">
+          <button type="button" class="card-action-btn investigate-btn">Investigate</button>
           <button type="button" class="card-action-btn review-btn" data-review-label="relevant">Relevant</button>
           <button type="button" class="card-action-btn review-btn" data-review-label="not-relevant">Not relevant</button>
           <button type="button" class="card-action-btn citation-copy-btn">Copy citation</button>
@@ -691,6 +692,7 @@
     card.querySelectorAll('.library-action-btn').forEach((button) => {
       button.addEventListener('click', () => handleLibraryAction(button.dataset.libraryAction, item, button));
     });
+    card.querySelector('.investigate-btn').addEventListener('click', () => investigateDocument(item));
     card.querySelectorAll('.review-btn').forEach((button) => {
       button.addEventListener('click', () => submitReview(item, button.dataset.reviewLabel, button));
     });
@@ -701,6 +703,61 @@
     }));
 
     return card;
+  }
+
+  async function investigateDocument(item) {
+    const doc = item.document;
+    const button = item.cardButton;
+    const paper = {
+      doi: doc.metadata?.doi,
+      url: doc.canonicalUrl || doc.url,
+    };
+    try {
+      const response = await fetch('/api/investigate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paper }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Investigation failed');
+      openInvestigationModal(payload);
+    } catch (error) {
+      showError('Investigation Interrupted', error.message);
+    }
+  }
+
+  function openInvestigationModal(investigation) {
+    const paper = investigation.paper || {};
+    dom.modalRolePill.textContent = 'Investigation';
+    dom.modalDocType.textContent = `${investigation.claims?.length || 0} claims`;
+    dom.modalDate.textContent = paper.published || 'Unknown';
+    dom.modalOA.textContent = investigation.status === 'complete' ? 'Complete' : investigation.status;
+    dom.modalTitle.textContent = paper.title || 'Investigation';
+    dom.modalAuthors.textContent = (paper.authors || []).join(', ');
+    dom.modalVenue.textContent = paper.venue ? `Published in: ${paper.venue}` : '';
+    dom.modalWhyUsefulText.textContent = `${investigation.evidence?.length || 0} related evidence items found. Review the sources below before drawing conclusions.`;
+    dom.modalAbstractText.innerHTML = markdownToHTML(paper.abstract || 'No abstract text indexed.');
+    dom.modalEvidenceList.innerHTML = '';
+    const claims = investigation.claims || [];
+    claims.forEach((claim) => {
+      const div = document.createElement('div');
+      div.className = 'modal-evidence-item';
+      div.innerHTML = `<span class="modal-evidence-need">${escapeHTML(claim.certainty || 'reported')}</span><p>${escapeHTML(claim.text || '')}</p>`;
+      dom.modalEvidenceList.appendChild(div);
+    });
+    (investigation.evidence || []).slice(0, 8).forEach((evidence) => {
+      const div = document.createElement('div');
+      div.className = 'modal-evidence-item';
+      div.innerHTML = `<span class="modal-evidence-need">Evidence</span><p>${escapeHTML(evidence.description || evidence.sourcePaper?.title || '')}</p>`;
+      dom.modalEvidenceList.appendChild(div);
+    });
+    dom.modalProvenanceChips.innerHTML = '<span class="provenance-tag">Deterministic investigation</span>';
+    dom.modalPreviewSection.classList.add('hidden');
+    dom.modalFooterActions.innerHTML = paper.url
+      ? `<a href="${escapeHTML(paper.url)}" target="_blank" rel="noopener noreferrer" class="modal-action-btn">Open Source ↗</a>`
+      : '';
+    dom.modalBackdrop.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
   }
 
   async function submitReview(item, label, button) {

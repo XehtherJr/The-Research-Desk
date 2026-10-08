@@ -16,6 +16,8 @@ app.use(express.json());
 // --- API Routes ---
 const searchRouter = require('./routes/search');
 app.use('/api/search', searchRouter);
+const investigateRouter = require('./routes/investigate');
+app.use('/api/investigate', investigateRouter);
 const reviewsRouter = require('./routes/reviews');
 app.use('/api/reviews', reviewsRouter);
 

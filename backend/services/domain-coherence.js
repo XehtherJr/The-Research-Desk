@@ -17,10 +17,12 @@ function validateDomainCoherence(doc, analysis) {
   if (exactTopic) score += 0.2;
   if (implementationRequested && implementationEvidence) score += 0.15;
   if (implementationRequested && !implementationEvidence) score -= 0.2;
-  const intentThreshold = analysis.intent?.type === 'building' ? 0.3 : analysis.intent?.type === 'researching' ? 0.2 : 0.12;
+  const queryDomains = analysis.searchPolicy?.detectedDomains || analysis.queryAnalysis?.searchPolicy?.detectedDomains || analysis.detectedDomains || [];
+  const isInterdisciplinary = queryDomains.length > 1;
+  const intentThreshold = isInterdisciplinary ? 0.08 : analysis.intent?.type === 'building' ? 0.3 : analysis.intent?.type === 'researching' ? 0.2 : 0.12;
   score = Number(Math.max(0, Math.min(1, score)).toFixed(3));
-  const hardMismatch = score < 0.15;
-  return { score, hardMismatch, intentThreshold, signals: { hasTargetedTerminology: terminology > 0.5, usesRelevantMethodology: methodology > 0.5, addressesTargetPopulation: true, followsExpectedStructure: Boolean(doc.type), contextIsRelevant: score > intentThreshold }, explanation: `Coherence score: ${score}. This document ${score > 0.6 ? 'directly' : 'tangentially'} addresses the topic.`, confidence: Math.min(1, terminology + methodology / 2) };
+  const hardMismatch = score < (isInterdisciplinary ? 0.05 : 0.15);
+  return { score, hardMismatch, intentThreshold, interdisciplinary: isInterdisciplinary, signals: { hasTargetedTerminology: terminology > 0.5, usesRelevantMethodology: methodology > 0.5, addressesTargetPopulation: true, followsExpectedStructure: Boolean(doc.type), contextIsRelevant: score > intentThreshold }, explanation: `Coherence score: ${score}. This document ${score > 0.6 ? 'directly' : 'tangentially'} addresses the topic.`, confidence: Math.min(1, terminology + methodology / 2) };
 }
 
 function applyCoherence(documents, analysis) {
